@@ -2,8 +2,6 @@
 
 A bridge application connecting Condor Soaring Simulator with the FlyShirley electronic flight bag.
 
-![Condor-Shirley-Bridge Screenshot](https://raw.githubusercontent.com/jlgabriel/Condor-Shirley-Bridge/main/assets/screenshot.jpg)
-
 ## Overview
 
 Condor-Shirley-Bridge bridges the gap between Condor Soaring Simulator and FlyShirley by:
