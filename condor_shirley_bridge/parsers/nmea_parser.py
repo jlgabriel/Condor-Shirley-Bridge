@@ -1,0 +1,408 @@
+#!/usr/bin/env python3
+
+"""
+NMEA Parser for Condor-Shirley-Bridge
+Parses NMEA sentences from Condor Soaring Simulator, specifically:
+- $GPGGA (Global Positioning System Fix Data)
+- $GPRMC (Recommended Minimum Specific GPS/Transit Data)
+- $LXWP0 (LX Navigation proprietary sentence for soaring data)
+
+Part of the Condor-Shirley-Bridge project.
+"""
+
+import re
+import time
+from dataclasses import dataclass
+from typing import Optional, Tuple, Dict, Any, Union
+
+
+@dataclass
+class GPSPosition:
+    """Position data parsed from NMEA sentences"""
+    timestamp: float  # UTC timestamp
+    latitude: float  # decimal degrees (north is positive)
+    longitude: float  # decimal degrees (east is positive)
+    altitude_msl: float  # meters
+    ground_speed: float  # knots
+    track_true: float  # degrees true
+    fix_quality: int  # 0=invalid, 1=GPS fix, 2=DGPS fix
+    satellites: int  # number of satellites in view
+    valid: bool  # is the position valid
+
+
+@dataclass
+class SoaringData:
+    """Soaring-specific data parsed from LXWP0 sentences"""
+    timestamp: float  # UTC timestamp
+    ias: float  # indicated airspeed in knots
+    baro_altitude: float  # barometric altitude in meters
+    vario: float  # vertical speed in m/s
+    avg_vario: Optional[float]  # Average vario in m/s
+    heading: float  # magnetic heading in degrees
+    track_bearing: Optional[float]  # true track over ground in degrees
+    turn_rate: Optional[float]  # turn rate in degrees/second
+    valid: bool  # is the data valid
+
+
+class NMEAParser:
+    """
+    Parser for NMEA sentences from Condor Soaring Simulator
+    """
+    def __init__(self):
+        # Store latest parsed data
+        self.gps_position: Optional[GPSPosition] = None
+        self.soaring_data: Optional[SoaringData] = None
+        
+        # For tracking reception status
+        self.last_gps_time = 0
+        self.last_soaring_time = 0
+        
+        # Recognizable sentence patterns
+        self.patterns = {
+            "GPGGA": re.compile(r'^\$GPGGA'),
+            "GPRMC": re.compile(r'^\$GPRMC'),
+            "LXWP0": re.compile(r'^\$LXWP0')
+        }
+    
+    def parse_sentence(self, sentence: str) -> bool:
+        """
+        Parse an NMEA sentence and update the corresponding data object
+        Returns True if the sentence was recognized and parsed successfully
+        """
+        sentence = sentence.strip()
+        
+        # Quick check for empty input
+        if not sentence:
+            return False
+            
+        # Check for checksum validity (if present)
+        if '*' in sentence:
+            parts = sentence.split('*')
+            if len(parts) == 2 and len(parts[1]) >= 2:
+                checksum = int(parts[1][:2], 16)
+                calc_checksum = self._calculate_checksum(parts[0])
+                if checksum != calc_checksum:
+                    return False  # Invalid checksum
+        
+        # Determine sentence type and parse accordingly
+        if self.patterns["GPGGA"].match(sentence):
+            return self._parse_gpgga(sentence)
+        elif self.patterns["GPRMC"].match(sentence):
+            return self._parse_gprmc(sentence)
+        elif self.patterns["LXWP0"].match(sentence):
+            return self._parse_lxwp0(sentence)
+            
+        return False  # Unrecognized sentence
+    
+    def _calculate_checksum(self, data: str) -> int:
+        """Calculate the checksum for an NMEA sentence"""
+        # Skip the $ at the beginning
+        data = data[1:] if data.startswith('$') else data
+        
+        # XOR all bytes
+        checksum = 0
+        for char in data:
+            checksum ^= ord(char)
+            
+        return checksum
+    
+    def _parse_gpgga(self, sentence: str) -> bool:
+        """
+        Parse $GPGGA sentence (Global Positioning System Fix Data)
+        Format: $GPGGA,time,lat,N/S,lon,E/W,quality,satellites,hdop,altitude,M,geoid,M,age,ref*checksum
+        """
+        try:
+            # Split the sentence into fields
+            fields = sentence.split(',')
+            if len(fields) < 15:
+                return False  # Not enough fields
+                
+            # Extract values
+            time_str = fields[1]
+            lat_str = fields[2]
+            lat_dir = fields[3]
+            lon_str = fields[4]
+            lon_dir = fields[5]
+            quality = fields[6]
+            satellites = fields[7]
+            altitude = fields[9]
+            
+            # Convert time format HHMMSS.SSS to a timestamp
+            if time_str:
+                hours = int(time_str[0:2])
+                minutes = int(time_str[2:4])
+                seconds = float(time_str[4:])
+                timestamp = hours * 3600 + minutes * 60 + seconds
+            else:
+                timestamp = time.time()  # Use system time if not available
+                
+            # Convert latitude from DDMM.MMMMM format to decimal degrees
+            if lat_str and lat_dir:
+                lat_deg = float(lat_str[0:2])
+                lat_min = float(lat_str[2:])
+                latitude = lat_deg + (lat_min / 60.0)
+                if lat_dir == 'S':
+                    latitude = -latitude
+            else:
+                latitude = 0.0
+                
+            # Convert longitude from DDDMM.MMMMM format to decimal degrees
+            if lon_str and lon_dir:
+                lon_deg = float(lon_str[0:3])
+                lon_min = float(lon_str[3:])
+                longitude = lon_deg + (lon_min / 60.0)
+                if lon_dir == 'W':
+                    longitude = -longitude
+            else:
+                longitude = 0.0
+            
+            # Parse other numeric values
+            fix_quality = int(quality) if quality else 0
+            sats = int(satellites) if satellites else 0
+            alt_msl = float(altitude) if altitude else 0.0
+            
+            # Update GPS position (only partial data from GGA)
+            if not self.gps_position:
+                self.gps_position = GPSPosition(
+                    timestamp=timestamp,
+                    latitude=latitude,
+                    longitude=longitude,
+                    altitude_msl=alt_msl,
+                    ground_speed=0.0,  # Will be updated by RMC if available
+                    track_true=0.0,    # Will be updated by RMC if available
+                    fix_quality=fix_quality,
+                    satellites=sats,
+                    valid=(fix_quality > 0)
+                )
+            else:
+                # Update existing position with GGA data
+                self.gps_position.timestamp = timestamp
+                self.gps_position.latitude = latitude
+                self.gps_position.longitude = longitude
+                self.gps_position.altitude_msl = alt_msl
+                self.gps_position.fix_quality = fix_quality
+                self.gps_position.satellites = sats
+                self.gps_position.valid = (fix_quality > 0)
+                
+            self.last_gps_time = time.time()
+            return True
+                
+        except (ValueError, IndexError) as e:
+            print(f"Error parsing GPGGA: {e}")
+            return False
+    
+    def _parse_gprmc(self, sentence: str) -> bool:
+        """
+        Parse $GPRMC sentence (Recommended Minimum Navigation Information)
+        Format: $GPRMC,time,status,lat,N/S,lon,E/W,speed,course,date,mag_var,E/W*checksum
+        """
+        try:
+            # Split the sentence into fields
+            fields = sentence.split(',')
+            if len(fields) < 12:
+                return False  # Not enough fields
+                
+            # Extract values
+            time_str = fields[1]
+            status = fields[2]  # A=active, V=void
+            lat_str = fields[3]
+            lat_dir = fields[4]
+            lon_str = fields[5]
+            lon_dir = fields[6]
+            speed = fields[7]  # Speed over ground in knots
+            course = fields[8]  # Course over ground in degrees true
+            
+            # Convert time format HHMMSS.SSS to a timestamp
+            if time_str:
+                hours = int(time_str[0:2])
+                minutes = int(time_str[2:4])
+                seconds = float(time_str[4:])
+                timestamp = hours * 3600 + minutes * 60 + seconds
+            else:
+                timestamp = time.time()  # Use system time if not available
+                
+            # Convert latitude from DDMM.MMMMM format to decimal degrees
+            if lat_str and lat_dir:
+                lat_deg = float(lat_str[0:2])
+                lat_min = float(lat_str[2:])
+                latitude = lat_deg + (lat_min / 60.0)
+                if lat_dir == 'S':
+                    latitude = -latitude
+            else:
+                latitude = 0.0
+                
+            # Convert longitude from DDDMM.MMMMM format to decimal degrees
+            if lon_str and lon_dir:
+                lon_deg = float(lon_str[0:3])
+                lon_min = float(lon_str[3:])
+                longitude = lon_deg + (lon_min / 60.0)
+                if lon_dir == 'W':
+                    longitude = -longitude
+            else:
+                longitude = 0.0
+            
+            # Parse other numeric values
+            ground_speed = float(speed) if speed else 0.0
+            track_true = float(course) if course else 0.0
+            is_valid = (status == 'A')
+            
+            # Create or update GPS position
+            if not self.gps_position:
+                self.gps_position = GPSPosition(
+                    timestamp=timestamp,
+                    latitude=latitude,
+                    longitude=longitude,
+                    altitude_msl=0.0,  # Will be updated by GGA if available
+                    ground_speed=ground_speed,
+                    track_true=track_true,
+                    fix_quality=1 if is_valid else 0,
+                    satellites=0,  # Will be updated by GGA if available
+                    valid=is_valid
+                )
+            else:
+                # Update existing position with RMC data
+                self.gps_position.timestamp = timestamp
+                self.gps_position.latitude = latitude
+                self.gps_position.longitude = longitude
+                self.gps_position.ground_speed = ground_speed
+                self.gps_position.track_true = track_true
+                # Only override validity if RMC says it's invalid
+                if not is_valid:
+                    self.gps_position.valid = False
+                    
+            self.last_gps_time = time.time()
+            return True
+                
+        except (ValueError, IndexError) as e:
+            print(f"Error parsing GPRMC: {e}")
+            return False
+    
+    def _parse_lxwp0(self, sentence: str) -> bool:
+        """
+        Parse $LXWP0 sentence (LX Navigation proprietary for soaring data)
+        Format: $LXWP0,logger_stored,IAS,baroAlt,vario,,,,,,,heading,track_bearing,turn_rate*checksum
+        
+        Where:
+        - IAS: Indicated airspeed (knots)
+        - baroAlt: Barometric altitude (meters)
+        - vario: Instantaneous vertical speed (m/s)
+        - heading: Magnetic heading (degrees)
+        - track_bearing: Ground track (degrees)
+        - turn_rate: Turn rate (degrees/second)
+        """
+        try:
+            # Split the sentence into fields
+            parts = sentence.split('*')
+            fields = parts[0].split(',')
+            if len(fields) < 13:
+                return False  # Not enough fields
+                
+            # Extract values (Skip first field, logger indicator)
+            ias_str = fields[1]  # Indicated airspeed in knots
+            alt_str = fields[2]  # Barometric altitude in meters
+            vario_str = fields[3]  # Vertical speed in m/s
+            avg_vario_str = fields[4]  # Average vario (can be empty)
+            heading_str = fields[10]  # Magnetic heading in degrees
+            track_str = fields[11]  # Track over ground in degrees
+            turn_rate_str = fields[12]  # Turn rate in degrees/second
+            
+            # Parse numeric values
+            ias = float(ias_str) if ias_str else 0.0
+            baro_alt = float(alt_str) if alt_str else 0.0
+            vario = float(vario_str) if vario_str else 0.0
+            avg_vario = float(avg_vario_str) if avg_vario_str else None
+            heading = float(heading_str) if heading_str else 0.0
+            track = float(track_str) if track_str else None
+            turn_rate = float(turn_rate_str) if turn_rate_str else None
+            
+            # Use current time or GPS time if available
+            timestamp = self.gps_position.timestamp if self.gps_position else time.time()
+            
+            # Create or update soaring data
+            self.soaring_data = SoaringData(
+                timestamp=timestamp,
+                ias=ias,
+                baro_altitude=baro_alt,
+                vario=vario,
+                avg_vario=avg_vario,
+                heading=heading,
+                track_bearing=track,
+                turn_rate=turn_rate,
+                valid=True
+            )
+            
+            self.last_soaring_time = time.time()
+            return True
+                
+        except (ValueError, IndexError) as e:
+            print(f"Error parsing LXWP0: {e}")
+            return False
+    
+    def is_data_fresh(self) -> Tuple[bool, bool]:
+        """
+        Check if GPS and soaring data are fresh (received within the last 5 seconds)
+        Returns (gps_fresh, soaring_fresh)
+        """
+        now = time.time()
+        gps_fresh = (now - self.last_gps_time) < 5.0
+        soaring_fresh = (now - self.last_soaring_time) < 5.0
+        return (gps_fresh, soaring_fresh)
+    
+    def get_combined_data(self) -> Dict[str, Any]:
+        """
+        Return a combined dictionary with all available data
+        """
+        result = {}
+        
+        # Check data freshness
+        gps_fresh, soaring_fresh = self.is_data_fresh()
+        
+        # Add GPS data if available
+        if self.gps_position and gps_fresh:
+            result.update({
+                "latitude": self.gps_position.latitude,
+                "longitude": self.gps_position.longitude,
+                "altitude_msl": self.gps_position.altitude_msl,
+                "ground_speed": self.gps_position.ground_speed,
+                "track_true": self.gps_position.track_true,
+                "gps_valid": self.gps_position.valid,
+                "fix_quality": self.gps_position.fix_quality,
+                "satellites": self.gps_position.satellites
+            })
+        
+        # Add soaring data if available
+        if self.soaring_data and soaring_fresh:
+            result.update({
+                "ias": self.soaring_data.ias,
+                "baro_altitude": self.soaring_data.baro_altitude,
+                "vario": self.soaring_data.vario,
+                "avg_vario": self.soaring_data.avg_vario,
+                "heading": self.soaring_data.heading,
+                "track_bearing": self.soaring_data.track_bearing,
+                "turn_rate": self.soaring_data.turn_rate
+            })
+            
+        return result
+
+
+# Example usage:
+if __name__ == "__main__":
+    parser = NMEAParser()
+    
+    # Test with sample sentences
+    test_sentences = [
+        "$GPGGA,170000.021,4553.3709,N,01353.4357,E,1,12,10,117.4,M,,,,,0000*02",
+        "$GPRMC,170000.021,A,4553.3709,N,01353.4357,E,0.00,267.45,,,,*23",
+        "$LXWP0,Y,17.5,117.4,0.00,,,,,,268,268,0.0*7A"
+    ]
+    
+    for sentence in test_sentences:
+        result = parser.parse_sentence(sentence)
+        print(f"Parsed: {sentence}")
+        print(f"Result: {result}")
+    
+    # Display combined data
+    combined = parser.get_combined_data()
+    print("\nCombined Data:")
+    for key, value in combined.items():
+        print(f"{key}: {value}")
