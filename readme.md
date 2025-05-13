@@ -1,6 +1,6 @@
 # Condor-Shirley-Bridge
 
-A bridge application connecting Condor Soaring Simulator with the FlyShirley electronic flight bag.
+A bridge application connecting Condor Soaring Simulator with the FlyShirley AI Copilot, Trainer and Assistant (https://airplane.team/)
 
 ## Overview
 
