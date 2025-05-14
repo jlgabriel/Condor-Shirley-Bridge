@@ -143,15 +143,17 @@ class Bridge:
         except Exception as e:
             logger.error(f"Error processing UDP data: {e}")
             self.error_count += 1
-    
+
     def _get_data_for_websocket(self) -> Dict[str, Any]:
         """
         Provide data for the WebSocket server.
-        
+
         Returns:
             dict: Processed data for WebSocket clients
         """
-        return self.sim_data.get_data()
+        data = self.sim_data.get_data()
+        logger.debug(f"Data for WebSocket: {data}")
+        return data
     
     async def start(self) -> None:
         """Start the bridge and all components."""
@@ -323,11 +325,11 @@ class Bridge:
         logger.debug("Simulation Data:")
         for source, status in sim_status.items():
             logger.debug(f"  {source}: {'Fresh' if status['fresh'] else 'Stale'}")
-    
+
     def get_status(self) -> Dict[str, Any]:
         """
         Get the status of the bridge and all components.
-        
+
         Returns:
             dict: Status information
         """
@@ -336,7 +338,10 @@ class Bridge:
         udp_status = self.udp_receiver.get_status() if self.settings.get('udp', 'enabled') else None
         ws_status = self.websocket_server.get_status() if self.settings.get('websocket', 'enabled') else None
         sim_status = self.sim_data.get_source_status()
-        
+
+        # Get actual flight data
+        flight_data = self.sim_data.get_data()
+
         # Build status dictionary
         result = {
             "running": self.running,
@@ -347,9 +352,10 @@ class Bridge:
             "serial": serial_status,
             "udp": udp_status,
             "websocket": ws_status,
-            "sim_data": sim_status
+            "sim_data": sim_status,
+            "data": flight_data  # Add flight data to the response
         }
-        
+
         return result
     
     def update_settings(self, new_settings: Optional[str] = None) -> bool:

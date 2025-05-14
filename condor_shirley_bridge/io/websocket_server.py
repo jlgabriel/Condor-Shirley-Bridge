@@ -15,7 +15,7 @@ import time
 from typing import Dict, Set, Any, Optional, Callable
 
 import websockets
-from websockets.server import WebSocketServerProtocol, serve
+from websockets.legacy.server import WebSocketServerProtocol, serve
 
 # Configure logging
 logging.basicConfig(
@@ -237,6 +237,7 @@ class WebSocketServer:
     def _format_for_shirley(self, sim_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Format simulator data according to FlyShirley API expectations.
+        Minimal version with only recognized fields.
 
         Args:
             sim_data: Raw simulator data
@@ -244,67 +245,45 @@ class WebSocketServer:
         Returns:
             dict: Formatted data for FlyShirley
         """
-        # Prepare position data
+        # Prepare position data with only known accepted fields
         position = {
             "latitudeDeg": sim_data.get("latitude", 0.0),
             "longitudeDeg": sim_data.get("longitude", 0.0),
-            "mslAltitudeFt": sim_data.get("altitude_msl", 0.0) * 3.28084,  # m to ft
-            "gpsGroundSpeedKts": sim_data.get("ground_speed", 0.0),
-            "trueTrackDeg": sim_data.get("track_true", 0.0),
+            "mslAltitudeFt": sim_data.get("altitude_msl", 0.0) * 3.28084 if sim_data.get(
+                "altitude_msl") is not None else 0.0,
+            # No groundSpeedKts, no trueTrackDeg
         }
 
         # Add optional AGL height if available
-        if "height_agl" in sim_data:
-            position["aglAltitudeFt"] = sim_data["height_agl"] * 3.28084  # m to ft
+        height_agl = sim_data.get("height_agl")
+        if height_agl is not None:
+            position["aglAltitudeFt"] = height_agl * 3.28084  # m to ft
 
-        # Prepare attitude data
+        # Prepare attitude data with only known accepted fields
         attitude = {
             "rollAngleDegRight": sim_data.get("bank_deg", 0.0),
             "pitchAngleDegUp": sim_data.get("pitch_deg", 0.0),
             "trueHeadingDeg": sim_data.get("heading", sim_data.get("yaw_deg", 0.0)),
+            # No yawStringDeg, no gForce
         }
 
-        # Add optional yaw string if available
-        if "yawstring_angle_deg" in sim_data:
-            attitude["yawStringDeg"] = sim_data["yawstring_angle_deg"]
+        # Add turn rate if available
+        turn_rate = sim_data.get("turn_rate")
+        if turn_rate is not None:
+            attitude["turnRateDegPerSec"] = turn_rate
 
-        # Prepare soaring-specific data
-        soaring = {
-            "indicatedAirspeedKts": sim_data.get("ias_kts", sim_data.get("ias", 0.0)),
-            "totalEnergyVarioFpm": sim_data.get("vario_mps", 0.0) * 196.85,  # m/s to fpm
-        }
+        # IAS and vario don't seem to be recognized anywhere
+        # Let's not include them for now
 
-        # Add optional netto vario if available
-        if "netto_vario_mps" in sim_data:
-            soaring["nettoVarioFpm"] = sim_data["netto_vario_mps"] * 196.85  # m/s to fpm
-
-        # Add optional average vario if available
-        if "avg_vario" in sim_data:
-            soaring["averageVarioFpm"] = sim_data["avg_vario"] * 196.85  # m/s to fpm
-
-        # Add optional turn rate if available
-        if "turn_rate" in sim_data:
-            attitude["turnRateDegPerSec"] = sim_data["turn_rate"]
-
-        # Add optional G-force if available
-        if "g_force" in sim_data:
-            attitude["gForce"] = sim_data["g_force"]
-
-        # Add environment data if available
-        environment = {}
-        if "turbulence" in sim_data:
-            environment["turbulenceIntensity"] = sim_data["turbulence"]
-
-        # Assemble final data structure
+        # Assemble final data structure - only known working objects
         result = {
             "position": position,
-            "attitude": attitude,
-            "soaring": soaring
+            "attitude": attitude
+            # No soaring, no environment
         }
 
-        # Add environment if we have any data
-        if environment:
-            result["environment"] = environment
+        # Log what we're sending for debugging
+        logger.debug(f"Sending minimal data to FlyShirley: {result}")
 
         return result
 

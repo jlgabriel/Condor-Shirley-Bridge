@@ -307,17 +307,13 @@ class SimData:
             # Limit history size
             if len(self._history[category]) > self._history_max_size:
                 self._history[category].pop(0)
-    
+
     def get_data(self) -> Dict[str, Any]:
-        """
-        Get the current combined simulation data.
-        
-        Returns:
-            dict: Combined simulation data
-        """
         with self._lock:
             # Return a copy to prevent external modification
-            return self._data.copy()
+            data = self._data.copy()
+            logger.debug(f"SimData.get_data() returning: {data}")
+            return data
     
     def get_source_status(self) -> Dict[str, Dict[str, Any]]:
         """

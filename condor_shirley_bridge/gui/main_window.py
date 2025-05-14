@@ -439,17 +439,17 @@ class MainWindow:
         """Called when the bridge has stopped."""
         self.start_stop_button.config(text="Start Bridge", state=tk.NORMAL)
         self.status_bar.config(text="Bridge stopped")
-    
+
     def _update_status(self) -> None:
-        """Update the status display with current bridge status."""
         if self.bridge and self.bridge.running:
             try:
                 # Get bridge status
                 status = self.bridge.get_status()
-                
+                logger.debug(f"MainWindow._update_status received: {status}")
+
                 # Update status panel
                 self.status_panel.update_status(status)
-                
+
                 # Update connection indicators
                 self._update_connection_indicators(status)
             except Exception as e:
