@@ -77,13 +77,14 @@ class MainWindow:
         # Show "first run" message if applicable
         if self.settings.settings.first_run:
             self._show_first_run_message()
-    
+
     def _setup_window(self) -> None:
         """Configure the main window."""
         self.master.title("Condor-Shirley-Bridge")
-        self.master.geometry("800x600")
-        self.master.minsize(600, 450)
-        
+        self.master.geometry("900x750") # Set default size
+        self.master.minsize(700, 450) # Set minimum size
+
+        # Rest of the method remains the same
         # Set icon if available
         try:
             icon_path = os.path.join(os.path.dirname(__file__), '../../assets/icon.ico')
@@ -91,11 +92,11 @@ class MainWindow:
                 self.master.iconbitmap(icon_path)
         except Exception as e:
             logger.warning(f"Could not set window icon: {e}")
-        
+
         # Configure grid layout
         self.master.grid_columnconfigure(0, weight=1)
         self.master.grid_rowconfigure(1, weight=1)  # Status panel gets all extra space
-        
+
         # Apply theme from settings
         self._apply_theme()
     
@@ -189,13 +190,13 @@ class MainWindow:
                 )
         else:
             self.recent_menu.add_command(label="No recent configurations", state=tk.DISABLED)
-    
+
     def _create_widgets(self) -> None:
         """Create the main window widgets."""
         # Control panel at the top
         self.control_frame = ttk.Frame(self.master, padding="10")
         self.control_frame.grid(row=0, column=0, sticky="ew")
-        
+
         # Start/Stop button
         self.start_stop_button = ttk.Button(
             self.control_frame,
@@ -203,7 +204,7 @@ class MainWindow:
             command=self._toggle_bridge
         )
         self.start_stop_button.pack(side="left", padx=5)
-        
+
         # Settings button
         self.settings_button = ttk.Button(
             self.control_frame,
@@ -211,68 +212,91 @@ class MainWindow:
             command=self._open_settings
         )
         self.settings_button.pack(side="left", padx=5)
-        
+
+        # Add log controls to the right of the existing buttons
+        log_level_label = ttk.Label(self.control_frame, text="Log Level:")
+        log_level_label.pack(side="left", padx=(10, 2))
+
+        self.log_level_var = tk.StringVar(value="INFO")
+        self.log_level_combo = ttk.Combobox(
+            self.control_frame,
+            textvariable=self.log_level_var,
+            values=["INFO", "DEBUG"],
+            width=6,
+            state="readonly"
+        )
+        self.log_level_combo.pack(side="left", padx=2)
+        self.log_level_combo.bind("<<ComboboxSelected>>", self._change_log_level)
+
+        # Clear log button
+        clear_log_button = ttk.Button(
+            self.control_frame,
+            text="Clear Log",
+            command=self._clear_log
+        )
+        clear_log_button.pack(side="left", padx=5)
+
         # Connection status indicators
         self.indicators_frame = ttk.Frame(self.control_frame)
         self.indicators_frame.pack(side="right", padx=5)
-        
+
         # Serial indicator
         self.serial_frame = ttk.Frame(self.indicators_frame)
         self.serial_frame.pack(side="left", padx=5)
-        
+
         self.serial_label = ttk.Label(self.serial_frame, text="Serial:")
         self.serial_label.pack(side="left")
-        
+
         self.serial_status = ttk.Label(
             self.serial_frame,
             text="Disconnected",
             foreground="red"
         )
         self.serial_status.pack(side="left")
-        
+
         # UDP indicator
         self.udp_frame = ttk.Frame(self.indicators_frame)
         self.udp_frame.pack(side="left", padx=5)
-        
+
         self.udp_label = ttk.Label(self.udp_frame, text="UDP:")
         self.udp_label.pack(side="left")
-        
+
         self.udp_status = ttk.Label(
             self.udp_frame,
             text="Disconnected",
             foreground="red"
         )
         self.udp_status.pack(side="left")
-        
+
         # WebSocket indicator
         self.ws_frame = ttk.Frame(self.indicators_frame)
         self.ws_frame.pack(side="left", padx=5)
-        
+
         self.ws_label = ttk.Label(self.ws_frame, text="WebSocket:")
         self.ws_label.pack(side="left")
-        
+
         self.ws_status = ttk.Label(
             self.ws_frame,
             text="Disconnected",
             foreground="red"
         )
         self.ws_status.pack(side="left")
-        
+
         # Status panel with notebook for different views
         self.status_frame = ttk.Frame(self.master, padding="10")
         self.status_frame.grid(row=1, column=0, sticky="nsew")
-        
+
         self.status_notebook = ttk.Notebook(self.status_frame)
         self.status_notebook.pack(fill=tk.BOTH, expand=True)
-        
+
         # Add status panel
         self.status_panel = StatusPanel(self.status_notebook)
         self.status_notebook.add(self.status_panel.frame, text="Status")
-        
+
         # Log panel
         self.log_frame = ttk.Frame(self.status_notebook)
         self.status_notebook.add(self.log_frame, text="Log")
-        
+
         self.log_text = tk.Text(
             self.log_frame,
             wrap=tk.WORD,
@@ -286,13 +310,13 @@ class MainWindow:
             command=self.log_text.yview
         )
         self.log_text['yscrollcommand'] = self.log_scrollbar.set
-        
+
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         # Configure custom log handler to show logs in the UI
         self._setup_log_handler()
-        
+
         # Status bar at the bottom
         self.status_bar = ttk.Label(
             self.master,
@@ -301,36 +325,59 @@ class MainWindow:
             padding="5 2"
         )
         self.status_bar.grid(row=2, column=0, sticky="ew")
-    
+
     def _setup_log_handler(self) -> None:
         """Set up a custom log handler to show logs in the UI."""
+
         class TextHandler(logging.Handler):
             def __init__(self, text_widget):
                 logging.Handler.__init__(self)
-                self.text_widget = text_widget
-            
+                self.text_widget = text_widget  # Store reference to the widget
+
             def emit(self, record):
                 msg = self.format(record)
-                
+
                 def append():
                     self.text_widget.configure(state=tk.NORMAL)
                     self.text_widget.insert(tk.END, msg + '\n')
                     self.text_widget.configure(state=tk.DISABLED)
                     self.text_widget.yview(tk.END)
-                
+
                 # Append in the main thread
                 self.text_widget.after(0, append)
-        
+
         # Create and add the handler
         text_handler = TextHandler(self.log_text)
-        text_handler.setLevel(logging.INFO)
+        text_handler.setLevel(logging.INFO)  # Default to INFO level
         text_handler.setFormatter(
             logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         )
-        
+
         # Add to root logger
         logging.getLogger().addHandler(text_handler)
-    
+
+    def _change_log_level(self, event) -> None:
+        """Change the log level based on the combobox selection."""
+        level_str = self.log_level_var.get()
+        level = logging.INFO if level_str == "INFO" else logging.DEBUG
+
+        # Find and update the text handler's level
+        for handler in logging.getLogger().handlers:
+            if isinstance(handler, logging.Handler) and hasattr(handler, 'text_widget'):
+                handler.setLevel(level)
+
+        # Clear the log when changing levels
+        self._clear_log()
+
+        # Log the change
+        logging.info(f"Log level changed to {level_str}")
+
+    def _clear_log(self) -> None:
+        """Clear the log text widget."""
+        self.log_text.configure(state=tk.NORMAL)
+        self.log_text.delete('1.0', tk.END)
+        self.log_text.configure(state=tk.DISABLED)
+
     def _init_bridge(self) -> None:
         """Initialize the bridge instance."""
         try:
