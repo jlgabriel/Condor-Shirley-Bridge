@@ -410,93 +410,110 @@ class StatusPanel:
             self.ws_rate.config(text=f"{broadcast_hz:.1f} Hz")
         
         # Update flight data if available
-        sim_data = status.get('data', {})
-        if not sim_data and 'sim_data' in status:
-            # Get flight data from data sources
-            nmea_active = False
-            udp_active = False
-            
-            if 'sim_data' in status:
-                data_sources = status['sim_data']
-                
-                # Check NMEA status
-                if 'nmea' in data_sources:
-                    nmea = data_sources['nmea']
-                    nmea_active = nmea.get('fresh', False)
-                    self.nmea_status.config(
-                        text="Active" if nmea_active else "No Data",
-                        foreground="green" if nmea_active else "red"
-                    )
-                
-                # Check UDP status
-                if 'condor_udp' in data_sources:
-                    udp = data_sources['condor_udp']
-                    udp_active = udp.get('fresh', False)
-                    self.udp_data_status.config(
-                        text="Active" if udp_active else "No Data",
-                        foreground="green" if udp_active else "red"
-                    )
-        
-        # Get flight data - either from 'data' key or directly from status
-        # We check multiple keys that could have the same info
-        flight_data = sim_data if sim_data else status
-        
-        # Update position data
-        if 'latitude' in flight_data:
-            self.latitude.config(text=f"{flight_data['latitude']:.5f}°")
-        
-        if 'longitude' in flight_data:
-            self.longitude.config(text=f"{flight_data['longitude']:.5f}°")
-        
-        if 'altitude_msl' in flight_data:
-            alt_ft = flight_data['altitude_msl'] * 3.28084  # m to ft
-            self.altitude.config(text=f"{alt_ft:.0f} ft")
-        
-        if 'height_agl' in flight_data:
-            agl_ft = flight_data['height_agl'] * 3.28084  # m to ft
-            self.height_agl.config(text=f"{agl_ft:.0f} ft")
-        
-        if 'ground_speed' in flight_data:
-            self.ground_speed.config(text=f"{flight_data['ground_speed']:.1f} kts")
-        
-        if 'track_true' in flight_data:
-            self.track.config(text=f"{flight_data['track_true']:.1f}°")
-        
-        # Update attitude data
-        if 'heading' in flight_data:
-            self.heading.config(text=f"{flight_data['heading']:.1f}°")
-        elif 'yaw_deg' in flight_data:
-            self.heading.config(text=f"{flight_data['yaw_deg']:.1f}°")
-        
-        if 'pitch_deg' in flight_data:
-            self.pitch.config(text=f"{flight_data['pitch_deg']:.1f}°")
-        
-        if 'bank_deg' in flight_data:
-            self.bank.config(text=f"{flight_data['bank_deg']:.1f}°")
-        
-        if 'turn_rate' in flight_data:
-            self.turn_rate.config(text=f"{flight_data['turn_rate']:.1f}°/s")
-        
-        if 'g_force' in flight_data:
-            self.g_force.config(text=f"{flight_data['g_force']:.1f} G")
-        
-        # Update soaring data
-        if 'ias' in flight_data:
-            self.ias.config(text=f"{flight_data['ias']:.1f} kts")
-        elif 'ias_kts' in flight_data:
-            self.ias.config(text=f"{flight_data['ias_kts']:.1f} kts")
-        
-        if 'vario' in flight_data:
-            self.vario.config(text=f"{flight_data['vario']:.1f} m/s")
-        elif 'vario_mps' in flight_data:
-            self.vario.config(text=f"{flight_data['vario_mps']:.1f} m/s")
-        
-        if 'netto_vario_mps' in flight_data:
-            self.netto.config(text=f"{flight_data['netto_vario_mps']:.1f} m/s")
-        
-        if 'avg_vario' in flight_data:
-            self.avg_vario.config(text=f"{flight_data['avg_vario']:.1f} m/s")
+        if 'sim_data' in status:
+            data_sources = status['sim_data']
 
+            # Check NMEA status
+            if 'nmea' in data_sources:
+                nmea = data_sources['nmea']
+                nmea_active = nmea.get('fresh', False)
+                self.nmea_status.config(
+                    text="Active" if nmea_active else "No Data",
+                    foreground="green" if nmea_active else "red"
+                )
+
+            # Check UDP status
+            if 'condor_udp' in data_sources:
+                udp = data_sources['condor_udp']
+                udp_active = udp.get('fresh', False)
+                self.udp_data_status.config(
+                    text="Active" if udp_active else "No Data",
+                    foreground="green" if udp_active else "red"
+                )
+
+        # Get flight data - either from 'data' key or directly from status
+        sim_data = status.get('data', {})
+        flight_data = sim_data if sim_data else status
+
+        # Get flight data - either from 'data' key or directly from status
+        flight_data = status.get('data', {}) if status.get('data') else status
+
+        # Update position data - safe version
+        latitude = flight_data.get('latitude')
+        if latitude is not None:
+            self.latitude.config(text=f"{latitude:.5f}°")
+
+        longitude = flight_data.get('longitude')
+        if longitude is not None:
+            self.longitude.config(text=f"{longitude:.5f}°")
+
+        altitude_msl = flight_data.get('altitude_msl')
+        if altitude_msl is not None:
+            alt_ft = altitude_msl * 3.28084  # m to ft
+            self.altitude.config(text=f"{alt_ft:.0f} ft")
+
+        height_agl = flight_data.get('height_agl')
+        if height_agl is not None:
+            agl_ft = height_agl * 3.28084  # m to ft
+            self.height_agl.config(text=f"{agl_ft:.0f} ft")
+
+        ground_speed = flight_data.get('ground_speed')
+        if ground_speed is not None:
+            self.ground_speed.config(text=f"{ground_speed:.1f} kts")
+
+        track_true = flight_data.get('track_true')
+        if track_true is not None:
+            self.track.config(text=f"{track_true:.1f}°")
+
+        # Update attitude data - safe version
+        heading = flight_data.get('heading')
+        if heading is not None:
+            self.heading.config(text=f"{heading:.1f}°")
+        elif 'yaw_deg' in flight_data:
+            yaw_deg = flight_data.get('yaw_deg')
+            if yaw_deg is not None:
+                self.heading.config(text=f"{yaw_deg:.1f}°")
+
+        pitch_deg = flight_data.get('pitch_deg')
+        if pitch_deg is not None:
+            self.pitch.config(text=f"{pitch_deg:.1f}°")
+
+        bank_deg = flight_data.get('bank_deg')
+        if bank_deg is not None:
+            self.bank.config(text=f"{bank_deg:.1f}°")
+
+        turn_rate = flight_data.get('turn_rate')
+        if turn_rate is not None:
+            self.turn_rate.config(text=f"{turn_rate:.1f}°/s")
+
+        g_force = flight_data.get('g_force')
+        if g_force is not None:
+            self.g_force.config(text=f"{g_force:.1f} G")
+
+        # Update soaring data - safe version
+        ias = flight_data.get('ias')
+        if ias is not None:
+            self.ias.config(text=f"{ias:.1f} kts")
+        elif 'ias_kts' in flight_data:
+            ias_kts = flight_data.get('ias_kts')
+            if ias_kts is not None:
+                self.ias.config(text=f"{ias_kts:.1f} kts")
+
+        vario = flight_data.get('vario')
+        if vario is not None:
+            self.vario.config(text=f"{vario:.1f} m/s")
+        elif 'vario_mps' in flight_data:
+            vario_mps = flight_data.get('vario_mps')
+            if vario_mps is not None:
+                self.vario.config(text=f"{vario_mps:.1f} m/s")
+
+        netto_vario = flight_data.get('netto_vario_mps')
+        if netto_vario is not None:
+            self.netto.config(text=f"{netto_vario:.1f} m/s")
+
+        avg_vario = flight_data.get('avg_vario')
+        if avg_vario is not None:
+            self.avg_vario.config(text=f"{avg_vario:.1f} m/s")
 
 # Example usage:
 if __name__ == "__main__":

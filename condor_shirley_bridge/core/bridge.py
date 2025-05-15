@@ -91,14 +91,15 @@ class Bridge:
             buffer_size=udp_settings.buffer_size,
             data_callback=self._handle_udp_data
         )
-        
+
         # WebSocket Server
         ws_settings = self.settings.get('websocket')
         self.websocket_server = WebSocketServer(
             host=ws_settings.host,
             port=ws_settings.port,
             path=ws_settings.path,
-            data_provider=self._get_data_for_websocket
+            data_provider=self._get_data_for_websocket,
+            compatibility_mode=ws_settings.compatibility_mode  # Nuevo parámetro añadido aquí
         )
         self.websocket_server.set_broadcast_interval(ws_settings.broadcast_interval)
     

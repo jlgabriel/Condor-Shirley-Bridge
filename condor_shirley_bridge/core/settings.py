@@ -52,6 +52,7 @@ class WebSocketSettings:
     port: int = 2992
     path: str = "/api/v1"
     broadcast_interval: float = 0.25  # seconds (4 Hz)
+    compatibility_mode: bool = True   # Nueva opción - compatibilidad con FlyShirley actual
 
 
 @dataclass

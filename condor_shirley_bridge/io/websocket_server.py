@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+# Este es el nuevo código para websocket_server.py con todos los cambios implementados
+
+# !/usr/bin/env python3
 
 """
 WebSocket Server for Condor-Shirley-Bridge
@@ -36,7 +38,8 @@ class WebSocketServer:
                  host: str = '0.0.0.0',
                  port: int = 2992,
                  path: str = '/api/v1',
-                 data_provider: Optional[Callable[[], Dict[str, Any]]] = None):
+                 data_provider: Optional[Callable[[], Dict[str, Any]]] = None,
+                 compatibility_mode: bool = True):  # Nueva opción
         """
         Initialize the WebSocket server.
 
@@ -45,11 +48,16 @@ class WebSocketServer:
             port: WebSocket port to listen on
             path: API endpoint path
             data_provider: Callback function that returns data to broadcast
+            compatibility_mode: True for current FlyShirley compatibility, False for extended data
         """
         self.host = host
         self.port = port
         self.path = path
         self.data_provider = data_provider
+        self.compatibility_mode = compatibility_mode
+
+        # Registrar el modo seleccionado
+        logger.info(f"WebSocket server initialized in {'compatibility' if compatibility_mode else 'full data'} mode")
 
         # Set of connected clients
         self.connections: Set[WebSocketServerProtocol] = set()
@@ -201,8 +209,11 @@ class WebSocketServer:
             if not sim_data:
                 return
 
-            # Convert to FlyShirley expected format
-            formatted_data = self._format_for_shirley(sim_data)
+            # Choose format based on compatibility mode
+            if self.compatibility_mode:
+                formatted_data = self._format_for_shirley_compatible(sim_data)
+            else:
+                formatted_data = self._format_for_shirley_full(sim_data)
 
             # JSON encode
             message = json.dumps(formatted_data)
@@ -234,16 +245,10 @@ class WebSocketServer:
             logger.error(f"Error broadcasting data: {e}")
             self.errors += 1
 
-    def _format_for_shirley(self, sim_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_for_shirley_compatible(self, sim_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Format simulator data according to FlyShirley API expectations.
-        Minimal version with only recognized fields.
-
-        Args:
-            sim_data: Raw simulator data
-
-        Returns:
-            dict: Formatted data for FlyShirley
+        Format simulator data for current FlyShirley compatibility.
+        Includes only fields known to be accepted by current FlyShirley version.
         """
         # Prepare position data with only known accepted fields
         position = {
@@ -251,7 +256,6 @@ class WebSocketServer:
             "longitudeDeg": sim_data.get("longitude", 0.0),
             "mslAltitudeFt": sim_data.get("altitude_msl", 0.0) * 3.28084 if sim_data.get(
                 "altitude_msl") is not None else 0.0,
-            # No groundSpeedKts, no trueTrackDeg
         }
 
         # Add optional AGL height if available
@@ -264,7 +268,6 @@ class WebSocketServer:
             "rollAngleDegRight": sim_data.get("bank_deg", 0.0),
             "pitchAngleDegUp": sim_data.get("pitch_deg", 0.0),
             "trueHeadingDeg": sim_data.get("heading", sim_data.get("yaw_deg", 0.0)),
-            # No yawStringDeg, no gForce
         }
 
         # Add turn rate if available
@@ -272,20 +275,117 @@ class WebSocketServer:
         if turn_rate is not None:
             attitude["turnRateDegPerSec"] = turn_rate
 
-        # IAS and vario don't seem to be recognized anywhere
-        # Let's not include them for now
-
         # Assemble final data structure - only known working objects
         result = {
             "position": position,
             "attitude": attitude
-            # No soaring, no environment
         }
 
-        # Log what we're sending for debugging
-        logger.debug(f"Sending minimal data to FlyShirley: {result}")
+        return result
+
+    def _format_for_shirley_full(self, sim_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Format simulator data with all available fields for future FlyShirley versions.
+        """
+        # Prepare position data
+        position = {
+            "latitudeDeg": sim_data.get("latitude", 0.0),
+            "longitudeDeg": sim_data.get("longitude", 0.0),
+            "mslAltitudeFt": sim_data.get("altitude_msl", 0.0) * 3.28084 if sim_data.get(
+                "altitude_msl") is not None else 0.0,
+            "gpsGroundSpeedKts": sim_data.get("ground_speed", 0.0),
+            "trueTrackDeg": sim_data.get("track_true", 0.0),
+        }
+
+        # Add optional AGL height if available
+        height_agl = sim_data.get("height_agl")
+        if height_agl is not None:
+            position["aglAltitudeFt"] = height_agl * 3.28084  # m to ft
+
+        # Prepare attitude data
+        attitude = {
+            "rollAngleDegRight": sim_data.get("bank_deg", 0.0),
+            "pitchAngleDegUp": sim_data.get("pitch_deg", 0.0),
+            "trueHeadingDeg": sim_data.get("heading", sim_data.get("yaw_deg", 0.0)),
+        }
+
+        # Add optional attitude data
+        turn_rate = sim_data.get("turn_rate")
+        if turn_rate is not None:
+            attitude["turnRateDegPerSec"] = turn_rate
+
+        yawstring = sim_data.get("yawstring_angle_deg")
+        if yawstring is not None:
+            attitude["yawStringDeg"] = yawstring
+
+        g_force = sim_data.get("g_force")
+        if g_force is not None:
+            attitude["gForce"] = g_force
+
+        # Prepare soaring-specific data
+        soaring = {}
+
+        # Handle IAS safely
+        ias = sim_data.get("ias_kts", sim_data.get("ias"))
+        if ias is not None:
+            soaring["indicatedAirspeedKts"] = ias
+
+        # Handle vario safely (m/s to fpm conversion)
+        vario_mps = sim_data.get("vario_mps", sim_data.get("vario"))
+        if vario_mps is not None:
+            soaring["totalEnergyVarioFpm"] = vario_mps * 196.85
+
+        # Add optional netto vario if available (m/s to fpm)
+        netto_vario = sim_data.get("netto_vario_mps")
+        if netto_vario is not None:
+            soaring["nettoVarioFpm"] = netto_vario * 196.85
+
+        # Add optional average vario if available (m/s to fpm)
+        avg_vario = sim_data.get("avg_vario")
+        if avg_vario is not None:
+            soaring["averageVarioFpm"] = avg_vario * 196.85
+
+        # Prepare environment data
+        environment = {}
+        turbulence = sim_data.get("turbulence")
+        if turbulence is not None:
+            environment["turbulenceIntensity"] = turbulence
+
+        # Assemble final data structure
+        result = {
+            "position": position,
+            "attitude": attitude,
+        }
+
+        # Add optional objects only if they have data
+        if soaring:
+            result["soaring"] = soaring
+
+        if environment:
+            result["environment"] = environment
 
         return result
+
+    # Keep the original method as a wrapper for backward compatibility
+    def _format_for_shirley(self, sim_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Wrapper for backward compatibility.
+        Uses either compatible or full format based on configuration.
+        """
+        if self.compatibility_mode:
+            return self._format_for_shirley_compatible(sim_data)
+        else:
+            return self._format_for_shirley_full(sim_data)
+
+    def set_compatibility_mode(self, enable: bool) -> None:
+        """
+        Set compatibility mode for FlyShirley.
+
+        Args:
+            enable: True for current version compatibility, False for future extended data
+        """
+        self.compatibility_mode = enable
+        logger.info(f"WebSocket server switched to {'compatibility' if enable else 'full data'} mode")
 
     def set_broadcast_interval(self, interval: float) -> None:
         """
@@ -333,14 +433,15 @@ class WebSocketServer:
             "broadcast_interval": self.broadcast_interval,
             "broadcast_frequency": 1.0 / self.broadcast_interval if self.broadcast_interval > 0 else 0,
             "last_broadcast_ago": now - self.last_broadcast_time if self.last_broadcast_time > 0 else None,
-            "data_provider_set": self.data_provider is not None
+            "data_provider_set": self.data_provider is not None,
+            "compatibility_mode": self.compatibility_mode
         }
 
 
 # Example usage:
 if __name__ == "__main__":
     import random
-    import math  # Importación añadida para la función sin()
+    import math
 
 
     # Simple example data provider that generates random flight data
@@ -362,10 +463,8 @@ if __name__ == "__main__":
 
 
     async def main():
-        import math  # Para la función sin() en random_data_provider
-
-        # Create server
-        server = WebSocketServer(port=2992, data_provider=random_data_provider)
+        # Create server with compatibility mode
+        server = WebSocketServer(port=2992, data_provider=random_data_provider, compatibility_mode=True)
 
         # Run in background task so we can still interact
         server_task = asyncio.create_task(server.start())

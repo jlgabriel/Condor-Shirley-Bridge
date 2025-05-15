@@ -330,7 +330,15 @@ class SettingsDialog:
             width=5
         )
         self.ws_interval.grid(row=4, column=1, sticky=tk.W, pady=5)
-        
+
+        self.ws_compatibility_var = tk.BooleanVar()
+        self.ws_compatibility = ttk.Checkbutton(
+            frame,
+            text="FlyShirley Compatibility Mode (current version)",
+            variable=self.ws_compatibility_var
+        )
+        self.ws_compatibility.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=5)
+
         # Help text for FlyShirley
         help_text = ttk.Label(
             frame,
@@ -338,7 +346,7 @@ class SettingsDialog:
             font=("", 9, "italic"),
             foreground="gray"
         )
-        help_text.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=10)
+        help_text.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=10)
     
     def _create_logging_tab(self) -> None:
         """Create the Logging settings tab."""
@@ -486,7 +494,7 @@ class SettingsDialog:
         self.serial_baudrate_var.set(self.settings.get('serial', 'baudrate'))
         self.serial_timeout_var.set(self.settings.get('serial', 'timeout'))
         self.serial_freshness_var.set(self.settings.get('serial', 'data_freshness_threshold'))
-        
+
         # Update serial controls state
         self._update_serial_state()
         
@@ -526,6 +534,9 @@ class SettingsDialog:
         self.show_advanced_var.set(self.settings.get('ui', 'show_advanced'))
         self.theme_var.set(self.settings.get('ui', 'theme'))
         self.check_updates_var.set(self.settings.get('ui', 'startup_check_updates'))
+
+        # Compatibility mode for old FlyShirley
+        self.ws_compatibility_var.set(self.settings.get('websocket', 'compatibility_mode'))
     
     def _save_settings(self) -> bool:
         """
@@ -569,6 +580,9 @@ class SettingsDialog:
             self.settings.set('ui', 'show_advanced', self.show_advanced_var.get())
             self.settings.set('ui', 'theme', self.theme_var.get())
             self.settings.set('ui', 'startup_check_updates', self.check_updates_var.get())
+
+            # Compatibility mode for old FlyShirley
+            self.settings.set('websocket', 'compatibility_mode', self.ws_compatibility_var.get())
             
             # Validate settings
             validation_errors = self.settings.validate()
