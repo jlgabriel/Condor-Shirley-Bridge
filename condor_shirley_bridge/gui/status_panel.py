@@ -515,6 +515,50 @@ class StatusPanel:
         if avg_vario is not None:
             self.avg_vario.config(text=f"{avg_vario:.1f} m/s")
 
+    def reset_status(self) -> None:
+        """Reset all status indicators to disconnected/inactive state."""
+        # Reset bridge status
+        self.bridge_status.config(text="Stopped", foreground="red")
+        self.uptime_value.config(text="00:00:00")
+
+        # Reset serial status
+        self.serial_status.config(text="Disconnected", foreground="red")
+        self.serial_rate.config(text="0 lines/sec")
+
+        # Reset UDP status
+        self.udp_status.config(text="Disconnected", foreground="red")
+        self.udp_rate.config(text="0 msgs/sec")
+
+        # Reset WebSocket status
+        self.ws_status.config(text="Disconnected", foreground="red")
+        self.ws_clients.config(text="0")
+        self.ws_rate.config(text="0 Hz")
+
+        # Reset data sources
+        self.nmea_status.config(text="No Data", foreground="red")
+        self.udp_data_status.config(text="No Data", foreground="red")
+
+        # Reset position data
+        self.latitude.config(text="0.00000°")
+        self.longitude.config(text="0.00000°")
+        self.altitude.config(text="0 ft")
+        self.height_agl.config(text="0 ft")
+        self.ground_speed.config(text="0.0 kts")
+        self.track.config(text="0.0°")
+
+        # Reset attitude data
+        self.heading.config(text="0.0°")
+        self.pitch.config(text="0.0°")
+        self.bank.config(text="0.0°")
+        self.turn_rate.config(text="0.0°/s")
+        self.g_force.config(text="1.0 G")
+
+        # Reset soaring data
+        self.ias.config(text="0.0 kts")
+        self.vario.config(text="0.0 m/s")
+        self.netto.config(text="0.0 m/s")
+        self.avg_vario.config(text="0.0 m/s")
+
 # Example usage:
 if __name__ == "__main__":
     root = tk.Tk()

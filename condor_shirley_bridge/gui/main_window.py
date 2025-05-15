@@ -464,30 +464,72 @@ class MainWindow:
             "Bridge Error",
             f"Failed to start bridge: {error_msg}"
         )
-    
+
     def _stop_bridge(self) -> None:
         """Stop the bridge."""
         if not self.bridge or not self.loop:
             return
-            
+
         # Disable the button while stopping
         self.start_stop_button.config(state=tk.DISABLED)
         self.status_bar.config(text="Stopping bridge...")
-        
+
         # Stop the bridge asynchronously
         def stop_async():
-            asyncio.run_coroutine_threadsafe(self.bridge.stop(), self.loop)
-            # The loop will be stopped in the bridge thread's finally block
-        
+            try:
+                asyncio.run_coroutine_threadsafe(self.bridge.stop(), self.loop)
+            except Exception as e:
+                logger.error(f"Error stopping bridge: {e}")
+                # Ensure the button is re-enabled
+                self.master.after(0, self._on_bridge_stopped)
+
         # Run in a thread to avoid blocking the GUI
-        threading.Thread(target=stop_async, daemon=True).start()
-    
+        thread = threading.Thread(target=stop_async, daemon=True)
+        thread.start()
+
+        # Start polling to check if the bridge has stopped
+        self._poll_bridge_stopped()
+
+    def _poll_bridge_stopped(self) -> None:
+        """Poll to check if the bridge has stopped."""
+        # If bridge is defined but not running, it's stopped
+        if self.bridge and not self.bridge.running:
+            self._on_bridge_stopped()
+        else:
+            # Check if the bridge thread is still alive
+            if self.bridge_thread and not self.bridge_thread.is_alive():
+                self._on_bridge_stopped()
+            else:
+                # Continue polling every 100ms
+                self.master.after(100, self._poll_bridge_stopped)
+
+        # Also set a timeout (5 seconds) to ensure the UI gets updated
+        if not hasattr(self, '_stop_timeout_id'):
+            self._stop_timeout_id = self.master.after(5000, self._force_bridge_stopped)
+
+    def _force_bridge_stopped(self) -> None:
+        """Force UI update if bridge takes too long to stop."""
+        if hasattr(self, '_stop_timeout_id'):
+            del self._stop_timeout_id
+
+        # Only force if button is still disabled
+        if self.start_stop_button.cget('state') == tk.DISABLED:
+            logger.warning("Force stopping bridge UI update after timeout")
+            self._on_bridge_stopped()
+
     def _on_bridge_stopped(self) -> None:
         """Called when the bridge has stopped."""
+        # Cancel any pending timeout
+        if hasattr(self, '_stop_timeout_id'):
+            self.master.after_cancel(self._stop_timeout_id)
+            del self._stop_timeout_id
+
+        # Reset button state
         self.start_stop_button.config(text="Start Bridge", state=tk.NORMAL)
         self.status_bar.config(text="Bridge stopped")
 
     def _update_status(self) -> None:
+        """Update status displays periodically."""
         if self.bridge and self.bridge.running:
             try:
                 # Get bridge status
@@ -504,7 +546,10 @@ class MainWindow:
         else:
             # Bridge not running, show disconnected status
             self._update_connection_indicators(None)
-        
+
+            # Reset all status indicators to show disconnected state
+            self.status_panel.reset_status()
+
         # Schedule next update
         self.master.after(1000, self._update_status)
     
