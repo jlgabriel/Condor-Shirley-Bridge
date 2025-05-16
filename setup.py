@@ -16,7 +16,7 @@ setup(
     name="condor-shirley-bridge",
     version="1.0.0",
     author="Juan Luis Gabriel",
-    author_email="author@example.com",
+    author_email="",
     description="A bridge between Condor Soaring Simulator and FlyShirley",
     long_description=long_description,
     long_description_content_type="text/markdown",
