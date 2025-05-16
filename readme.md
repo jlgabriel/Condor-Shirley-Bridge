@@ -213,3 +213,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Based on https://github.com/jlgabriel/ForeFlight-Shirley-Bridge by Juan Luis Gabriel.
 
+- Anthropic Claude 3.7 Sonnet, designer and coder of this application.
+
