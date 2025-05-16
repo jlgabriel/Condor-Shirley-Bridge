@@ -63,8 +63,8 @@ The result is a seamless integration that enriches your virtual soaring experien
 ### Condor Setup
 
 1. In Condor, enable NMEA output to a virtual COM port
-   - Use a virtual serial port tool like com0com if needed
-   - Default port is COM4 at 4800 baud
+   - Use a virtual serial port tool like com0com if needed (tested with com0com bridge from COM3 to COM4)
+   - Default Condor-Shirley-Bridge app incoming port is COM4 at 4800 baud
 
 2. Enable UDP output in Condor
    - Should be sending to IP 127.0.0.1 port 55278
