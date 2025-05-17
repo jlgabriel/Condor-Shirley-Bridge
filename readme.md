@@ -19,8 +19,8 @@ The result is a seamless integration that enriches your virtual soaring experien
 ## Features
 
 - **Dual-source data integration** - Merges position data from NMEA with attitude data from UDP
-- **Complete flight parameters** - Position, altitude, speed, vario, attitude, G-force, and more
-- **WebSocket API** - Compatible with FlyShirley's WebSocket client
+- **Complete flight parameters** - Position, altitude, speed, vario, attitude, and more
+- **WebSocket API** - Fully compatible with FlyShirley's v2.8 WebSocket API
 - **User-friendly GUI** - Easy configuration and real-time status monitoring
 - **Comprehensive settings** - Configure all aspects of the connection
 - **Dual-mode operation** - Run with GUI or in headless CLI mode
@@ -33,6 +33,7 @@ The result is a seamless integration that enriches your virtual soaring experien
 - Python 3.8 or later
 - Condor Soaring Simulator with NMEA and UDP output enabled
 - FlyShirley application (configured to use WebSocket)
+- Virtual serial port tool like com0com (for Windows)
 
 ### Dependencies
 
@@ -63,11 +64,13 @@ The result is a seamless integration that enriches your virtual soaring experien
 ### Condor Setup
 
 1. In Condor, enable NMEA output to a virtual COM port
-   - Use a virtual serial port tool like com0com if needed (tested with com0com bridge from COM3 to COM4)
-   - Default Condor-Shirley-Bridge app incoming port is COM4 at 4800 baud
+   - Use a virtual serial port tool like com0com (create a pair, e.g., COM3-COM4)
+   - Set up Condor to output to one end (e.g., COM3)
+   - Configure Condor-Shirley-Bridge to read from the other end (e.g., COM4)
+   - Default baud rate: 4800
 
 2. Enable UDP output in Condor
-   - Should be sending to IP 127.0.0.1 port 55278
+   - Configure Condor to send UDP data to IP 127.0.0.1 port 55278
 
 ### FlyShirley Setup
 
@@ -130,6 +133,34 @@ options:
   --log-file LOG_FILE   Log to specified file
 ```
 
+## FlyShirley Data Integration
+
+Condor-Shirley-Bridge provides the following data to FlyShirley:
+
+### Position Data
+- Latitude and longitude
+- MSL and AGL altitude (converted to feet)
+- Indicated airspeed (knots)
+- Ground speed (knots)
+- Vertical speed (feet per minute)
+
+### Attitude Data
+- Roll angle (degrees)
+- Pitch angle (degrees)
+- True heading (degrees)
+- True ground track (degrees)
+
+### Environment Data
+- Wind speed (approximated from turbulence data)
+
+### Levers and Controls
+- Flaps settings (as percentage)
+
+### Indicators
+- Total energy variometer (feet per minute)
+
+All data is formatted according to FlyShirley's v2.8 SimData schema specifications to ensure compatibility.
+
 ## How It Works
 
 1. **Data Collection**:
@@ -139,10 +170,10 @@ options:
 2. **Data Processing**:
    - SimData module combines data from both sources
    - Resolves conflicts and fills in missing information
-   - Converts units as necessary
+   - Converts units as necessary (meters to feet, m/s to fpm, etc.)
 
 3. **Data Distribution**:
-   - WebSocket Server broadcasts to FlyShirley at configurable intervals
+   - WebSocket Server broadcasts to FlyShirley at configurable intervals (default: 4 Hz)
    - Data is formatted according to FlyShirley's API expectations
 
 ## Development
@@ -185,6 +216,7 @@ python setup.py install
 - Verify Condor is configured to output NMEA
 - Check the correct COM port is selected
 - Ensure no other application is using the COM port
+- Verify the com0com virtual serial port pair is properly set up
 
 **No UDP data received**:
 - Confirm Condor is configured to send UDP data
@@ -194,12 +226,24 @@ python setup.py install
 **FlyShirley not connecting**:
 - Ensure WebSocket server is running
 - Check network connectivity between devices
-- Verify WebSocket URI format in FlyShirley
+- Verify WebSocket URI format in FlyShirley (ws://localhost:2992/api/v1)
+- Check logs for any JSON formatting errors
 
 **Application crashing**:
 - Check log file for error details
 - Verify all dependencies are installed
 - Try running with `--log-level DEBUG` for more information
+
+## Future Enhancements
+
+We are working with the FlyShirley development team to enhance the integration with additional soaring-specific data fields, including:
+
+- Netto variometer
+- Energy-compensated variometer
+- MacCready settings
+- Water ballast information
+- Quaternion-based attitude representation
+- Thermal and ridge lift data
 
 ## License
 
@@ -208,10 +252,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Thanks to the Condor Soaring Simulator Team for the great gliding experience.
-
+- Thanks to the FlyShirley team for their electronic flight bag for pilots.
 - Based on https://github.com/Airplane-Team/sim-interface by Airplane Team.
-
 - Based on https://github.com/jlgabriel/ForeFlight-Shirley-Bridge by Juan Luis Gabriel.
-
-- Anthropic Claude 3.7 Sonnet, designer and coder of this application.
-
+- Code assistance provided by Anthropic Claude 3.7 Sonnet.
