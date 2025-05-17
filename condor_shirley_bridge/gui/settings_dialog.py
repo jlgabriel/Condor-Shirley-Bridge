@@ -331,14 +331,6 @@ class SettingsDialog:
         )
         self.ws_interval.grid(row=4, column=1, sticky=tk.W, pady=5)
 
-        self.ws_compatibility_var = tk.BooleanVar()
-        self.ws_compatibility = ttk.Checkbutton(
-            frame,
-            text="FlyShirley Compatibility Mode (current version)",
-            variable=self.ws_compatibility_var
-        )
-        self.ws_compatibility.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=5)
-
         # Help text for FlyShirley
         help_text = ttk.Label(
             frame,
@@ -535,9 +527,6 @@ class SettingsDialog:
         self.theme_var.set(self.settings.get('ui', 'theme'))
         self.check_updates_var.set(self.settings.get('ui', 'startup_check_updates'))
 
-        # Compatibility mode for old FlyShirley
-        self.ws_compatibility_var.set(self.settings.get('websocket', 'compatibility_mode'))
-    
     def _save_settings(self) -> bool:
         """
         Save UI values to settings.
@@ -581,9 +570,6 @@ class SettingsDialog:
             self.settings.set('ui', 'theme', self.theme_var.get())
             self.settings.set('ui', 'startup_check_updates', self.check_updates_var.get())
 
-            # Compatibility mode for old FlyShirley
-            self.settings.set('websocket', 'compatibility_mode', self.ws_compatibility_var.get())
-            
             # Validate settings
             validation_errors = self.settings.validate()
             if validation_errors:

@@ -38,8 +38,7 @@ class WebSocketServer:
                  host: str = '0.0.0.0',
                  port: int = 2992,
                  path: str = '/api/v1',
-                 data_provider: Optional[Callable[[], Dict[str, Any]]] = None,
-                 compatibility_mode: bool = True):  # Nueva opción
+                 data_provider: Optional[Callable[[], Dict[str, Any]]] = None):
         """
         Initialize the WebSocket server.
 
@@ -48,16 +47,15 @@ class WebSocketServer:
             port: WebSocket port to listen on
             path: API endpoint path
             data_provider: Callback function that returns data to broadcast
-            compatibility_mode: True for current FlyShirley compatibility, False for extended data
         """
         self.host = host
         self.port = port
         self.path = path
         self.data_provider = data_provider
-        self.compatibility_mode = compatibility_mode
 
-        # Registrar el modo seleccionado
-        logger.info(f"WebSocket server initialized in {'compatibility' if compatibility_mode else 'full data'} mode")
+        # Logging
+        logger.info(f"WebSocket server initialized with enhanced data format for FlyShirley v2.8")
+
 
         # Set of connected clients
         self.connections: Set[WebSocketServerProtocol] = set()
@@ -209,11 +207,8 @@ class WebSocketServer:
             if not sim_data:
                 return
 
-            # Choose format based on compatibility mode
-            if self.compatibility_mode:
-                formatted_data = self._format_for_shirley_compatible(sim_data)
-            else:
-                formatted_data = self._format_for_shirley_full(sim_data)
+            # Format data for FlyShirley using enhanced format
+            formatted_data = self._format_for_shirley(sim_data)
 
             # JSON encode
             message = json.dumps(formatted_data)
@@ -245,147 +240,114 @@ class WebSocketServer:
             logger.error(f"Error broadcasting data: {e}")
             self.errors += 1
 
-    def _format_for_shirley_compatible(self, sim_data: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _format_for_shirley(sim_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Format simulator data for current FlyShirley compatibility.
-        Includes only fields known to be accepted by current FlyShirley version.
+        Formato mejorado para FlyShirley basado en el esquema de datos SimData v2.8.
+        Aprovecha al máximo los datos disponibles del simulador.
         """
-        # Prepare position data with only known accepted fields
-        position = {
-            "latitudeDeg": sim_data.get("latitude", 0.0),
-            "longitudeDeg": sim_data.get("longitude", 0.0),
-            "mslAltitudeFt": sim_data.get("altitude_msl", 0.0) * 3.28084 if sim_data.get(
-                "altitude_msl") is not None else 0.0,
-        }
+        result = {}
 
-        # Add optional AGL height if available
-        height_agl = sim_data.get("height_agl")
-        if height_agl is not None:
-            position["aglAltitudeFt"] = height_agl * 3.28084  # m to ft
+        # Preparar datos de posición
+        if any(key in sim_data for key in
+               ["latitude", "longitude", "altitude_msl", "height_agl", "ground_speed", "ias", "ias_kts", "vario",
+                "vario_mps"]):
+            position = {}
 
-        # Prepare attitude data with only known accepted fields
-        attitude = {
-            "rollAngleDegRight": sim_data.get("bank_deg", 0.0),
-            "pitchAngleDegUp": sim_data.get("pitch_deg", 0.0),
-            "trueHeadingDeg": sim_data.get("heading", sim_data.get("yaw_deg", 0.0)),
-        }
+            # Coordenadas básicas
+            if "latitude" in sim_data:
+                position["latitudeDeg"] = sim_data["latitude"]
+            if "longitude" in sim_data:
+                position["longitudeDeg"] = sim_data["longitude"]
 
-        # Add turn rate if available
-        turn_rate = sim_data.get("turn_rate")
-        if turn_rate is not None:
-            attitude["turnRateDegPerSec"] = turn_rate
+            # Altitudes
+            if "altitude_msl" in sim_data and sim_data["altitude_msl"] is not None:
+                position["mslAltitudeFt"] = sim_data["altitude_msl"] * 3.28084  # m a ft
+            if "height_agl" in sim_data and sim_data["height_agl"] is not None:
+                position["aglAltitudeFt"] = sim_data["height_agl"] * 3.28084  # m a ft
 
-        # Assemble final data structure - only known working objects
-        result = {
-            "position": position,
-            "attitude": attitude
-        }
+            # Velocidades
+            ias = sim_data.get("ias", sim_data.get("ias_kts"))
+            if ias is not None:
+                position["indicatedAirspeedKts"] = ias
 
-        return result
+            if "ground_speed" in sim_data and sim_data["ground_speed"] is not None:
+                position["gpsGroundSpeedKts"] = sim_data["ground_speed"]
 
-    def _format_for_shirley_full(self, sim_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Format simulator data with all available fields for future FlyShirley versions.
-        """
-        # Prepare position data
-        position = {
-            "latitudeDeg": sim_data.get("latitude", 0.0),
-            "longitudeDeg": sim_data.get("longitude", 0.0),
-            "mslAltitudeFt": sim_data.get("altitude_msl", 0.0) * 3.28084 if sim_data.get(
-                "altitude_msl") is not None else 0.0,
-            "gpsGroundSpeedKts": sim_data.get("ground_speed", 0.0),
-            "trueTrackDeg": sim_data.get("track_true", 0.0),
-        }
+            # Velocidad vertical (m/s a fpm)
+            vario = sim_data.get("vario", sim_data.get("vario_mps"))
+            if vario is not None:
+                position["verticalSpeedFpm"] = vario * 196.85  # m/s a fpm
 
-        # Add optional AGL height if available
-        height_agl = sim_data.get("height_agl")
-        if height_agl is not None:
-            position["aglAltitudeFt"] = height_agl * 3.28084  # m to ft
+            if position:  # Solo agregar si hay datos
+                result["position"] = position
 
-        # Prepare attitude data
-        attitude = {
-            "rollAngleDegRight": sim_data.get("bank_deg", 0.0),
-            "pitchAngleDegUp": sim_data.get("pitch_deg", 0.0),
-            "trueHeadingDeg": sim_data.get("heading", sim_data.get("yaw_deg", 0.0)),
-        }
+        # Preparar datos de actitud - ELIMINAMOS yawStringAngleDeg y gForce que no son reconocidos
+        if any(key in sim_data for key in ["bank_deg", "pitch_deg", "heading", "yaw_deg", "track_true"]):
+            attitude = {}
 
-        # Add optional attitude data
-        turn_rate = sim_data.get("turn_rate")
-        if turn_rate is not None:
-            attitude["turnRateDegPerSec"] = turn_rate
+            # Ángulos de actitud
+            if "bank_deg" in sim_data and sim_data["bank_deg"] is not None:
+                attitude["rollAngleDegRight"] = sim_data["bank_deg"]
 
-        yawstring = sim_data.get("yawstring_angle_deg")
-        if yawstring is not None:
-            attitude["yawStringDeg"] = yawstring
+            if "pitch_deg" in sim_data and sim_data["pitch_deg"] is not None:
+                attitude["pitchAngleDegUp"] = sim_data["pitch_deg"]
 
-        g_force = sim_data.get("g_force")
-        if g_force is not None:
-            attitude["gForce"] = g_force
+            # Dirección/heading (usar cualquiera disponible)
+            heading = sim_data.get("heading", sim_data.get("yaw_deg"))
+            if heading is not None:
+                attitude["trueHeadingDeg"] = heading
 
-        # Prepare soaring-specific data
-        soaring = {}
+            # Track sobre el terreno
+            if "track_true" in sim_data and sim_data["track_true"] is not None:
+                attitude["trueGroundTrackDeg"] = sim_data["track_true"]
 
-        # Handle IAS safely
-        ias = sim_data.get("ias_kts", sim_data.get("ias"))
-        if ias is not None:
-            soaring["indicatedAirspeedKts"] = ias
+            # Remover los campos no reconocidos:
+            # - No incluir yawstring_angle_deg
+            # - No incluir g_force
 
-        # Handle vario safely (m/s to fpm conversion)
-        vario_mps = sim_data.get("vario_mps", sim_data.get("vario"))
-        if vario_mps is not None:
-            soaring["totalEnergyVarioFpm"] = vario_mps * 196.85
+            if attitude:  # Solo agregar si hay datos
+                result["attitude"] = attitude
 
-        # Add optional netto vario if available (m/s to fpm)
-        netto_vario = sim_data.get("netto_vario_mps")
-        if netto_vario is not None:
-            soaring["nettoVarioFpm"] = netto_vario * 196.85
+        # Preparar datos de indicadores - ELIMINAR macreadySettingKts
+        vario = sim_data.get("vario", sim_data.get("vario_mps"))
+        if vario is not None:
+            result["indicators"] = {
+                "totalEnergyVariometerFpm": vario * 196.85  # m/s a fpm
+            }
 
-        # Add optional average vario if available (m/s to fpm)
-        avg_vario = sim_data.get("avg_vario")
-        if avg_vario is not None:
-            soaring["averageVarioFpm"] = avg_vario * 196.85
+        # Preparar datos de radionavegación - CORREGIR el valor para frequencyHz
+        if "radio_frequency" in sim_data and sim_data["radio_frequency"] is not None:
+            # Verificar que la frecuencia esté dentro del rango permitido (≤ 136975)
+            # Asumiendo que radio_frequency está en MHz y necesita ser Hz
+            freq_hz = min(136975, int(sim_data["radio_frequency"] * 1000))  # Limitado al máximo permitido
+            result["radiosNavigation"] = {
+                "frequencyHz": {"com1": freq_hz}
+            }
 
-        # Prepare environment data
+        # Preparar datos de palancas/controles
+        if "flaps" in sim_data and sim_data["flaps"] is not None:
+            # Asumiendo que flaps es un valor entre 0-3 o similar
+            # Convertir a porcentaje aproximado (0-100)
+            flaps_percent = min(100, (sim_data["flaps"] / 3) * 100)
+            result["levers"] = {
+                "flapsHandlePercentDown": flaps_percent
+            }
+
+        # Preparar datos de entorno
         environment = {}
-        turbulence = sim_data.get("turbulence")
-        if turbulence is not None:
-            environment["turbulenceIntensity"] = turbulence
 
-        # Assemble final data structure
-        result = {
-            "position": position,
-            "attitude": attitude,
-        }
+        # Turbulencia (si está disponible)
+        if "turbulence" in sim_data and sim_data["turbulence"] is not None:
+            # Turbulencia como información del viento (aproximado)
+            environment["aircraftWindSpeedKts"] = sim_data["turbulence"] * 10  # Aproximación
 
-        # Add optional objects only if they have data
-        if soaring:
-            result["soaring"] = soaring
-
-        if environment:
+        if environment:  # Solo agregar si hay datos
             result["environment"] = environment
 
+        # NO incluir simulation porque simTimeSeconds no es reconocido
+
         return result
-
-    # Keep the original method as a wrapper for backward compatibility
-    def _format_for_shirley(self, sim_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Wrapper for backward compatibility.
-        Uses either compatible or full format based on configuration.
-        """
-        if self.compatibility_mode:
-            return self._format_for_shirley_compatible(sim_data)
-        else:
-            return self._format_for_shirley_full(sim_data)
-
-    def set_compatibility_mode(self, enable: bool) -> None:
-        """
-        Set compatibility mode for FlyShirley.
-
-        Args:
-            enable: True for current version compatibility, False for future extended data
-        """
-        self.compatibility_mode = enable
-        logger.info(f"WebSocket server switched to {'compatibility' if enable else 'full data'} mode")
 
     def set_broadcast_interval(self, interval: float) -> None:
         """
@@ -434,7 +396,6 @@ class WebSocketServer:
             "broadcast_frequency": 1.0 / self.broadcast_interval if self.broadcast_interval > 0 else 0,
             "last_broadcast_ago": now - self.last_broadcast_time if self.last_broadcast_time > 0 else None,
             "data_provider_set": self.data_provider is not None,
-            "compatibility_mode": self.compatibility_mode
         }
 
 

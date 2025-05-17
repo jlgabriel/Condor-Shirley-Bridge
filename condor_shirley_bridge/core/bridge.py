@@ -98,8 +98,7 @@ class Bridge:
             host=ws_settings.host,
             port=ws_settings.port,
             path=ws_settings.path,
-            data_provider=self._get_data_for_websocket,
-            compatibility_mode=ws_settings.compatibility_mode  # Nuevo parámetro añadido aquí
+            data_provider=self._get_data_for_websocket
         )
         self.websocket_server.set_broadcast_interval(ws_settings.broadcast_interval)
     
