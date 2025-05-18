@@ -279,16 +279,16 @@ class Settings:
             logger.error(f"Error getting setting {section}.{key}: {e}")
         
         return None
-    
+
     def set(self, section: str, key: str, value: Any) -> bool:
         """
         Set a setting value.
-        
+
         Args:
             section: Section name (serial, udp, websocket, logging, ui)
             key: Setting key
             value: New value
-            
+
         Returns:
             bool: True if setting was changed
         """
@@ -296,30 +296,89 @@ class Settings:
             if hasattr(self.settings, section):
                 section_obj = getattr(self.settings, section)
                 if hasattr(section_obj, key):
-                    # Get current value and type
+                    # Caso especial para log_file_path
+                    if section == 'logging' and key == 'log_file_path':
+                        # Siempre tratamos esto como string a menos que sea None
+                        if value is None:
+                            setattr(section_obj, key, None)
+                        else:
+                            setattr(section_obj, key, str(value))
+                        return True
+
+                    # Get current value
                     current_value = getattr(section_obj, key)
+
+                    # Manejo especial para None
+                    if current_value is None:
+                        # Para campos que son None, necesitamos ser cuidadosos con el tipo
+                        if value is None:
+                            # None a None es fácil
+                            return True  # No change needed
+
+                        # Intentar determinar el tipo esperado desde las anotaciones
+                        try:
+                            annotations = section_obj.__class__.__annotations__
+                            if key in annotations:
+                                type_hint = annotations[key]
+
+                                # Manejar Optional[x] (Union[x, None])
+                                import typing
+                                origin = getattr(type_hint, "__origin__", None)
+                                args = getattr(type_hint, "__args__", None)
+
+                                if origin is typing.Union and type(None) in args:
+                                    # Es Optional[algo]
+                                    real_type = next((t for t in args if t is not type(None)), str)
+                                    if real_type is str:
+                                        # Para strings, simplemente convertimos
+                                        setattr(section_obj, key, str(value))
+                                        return True
+                                    else:
+                                        # Para otros tipos, intentamos convertir
+                                        try:
+                                            converted = real_type(value)
+                                            setattr(section_obj, key, converted)
+                                            return True
+                                        except Exception as e:
+                                            logger.debug(f"Cannot convert {value} to {real_type}: {e}")
+                        except Exception as e:
+                            logger.debug(f"Error determining type for {section}.{key}: {e}")
+
+                        # Si llegamos aquí, simplemente asignamos el valor tal cual
+                        setattr(section_obj, key, value)
+                        return True
+
+                    # Para valores no-None, manejo normal
                     target_type = type(current_value)
-                    
+
                     # Convert value to correct type
                     if target_type is bool and isinstance(value, int):
                         # Convert int to bool (0=False, non-zero=True)
                         typed_value = bool(value)
-                    elif value is None or isinstance(value, target_type):
-                        # Direct assignment for same type or None
+                    elif value is None:
+                        # Si el valor actual no es None pero el nuevo sí, permitimos esto
+                        typed_value = None
+                    elif isinstance(value, target_type):
+                        # Direct assignment for same type
                         typed_value = value
                     else:
                         # Try to convert to target type
-                        typed_value = target_type(value)
-                    
+                        try:
+                            typed_value = target_type(value)
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Cannot convert {key}={value} to {target_type}: {e}")
+                            # Si falla la conversión, usamos el valor tal cual
+                            typed_value = value
+
                     # Set the value
                     setattr(section_obj, key, typed_value)
                     return True
-        except (ValueError, TypeError) as e:
-            logger.error(f"Error setting {section}.{key}={value}: {e}")
+
+            return False
+
         except Exception as e:
-            logger.error(f"Unexpected error setting {section}.{key}: {e}")
-        
-        return False
+            logger.error(f"Unexpected error setting {section}.{key}: {e}", exc_info=True)
+            return False
     
     def reset_to_defaults(self) -> None:
         """Reset all settings to default values."""
