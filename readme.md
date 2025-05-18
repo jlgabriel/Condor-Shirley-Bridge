@@ -263,4 +263,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ![Log panel](assets/log.png)
 
-![Configuration tool](assets/settings.png)
+![Configuration tool](assets/settings2.png)
