@@ -698,11 +698,11 @@ class MainWindow:
     
     def _open_documentation(self) -> None:
         """Open the documentation in a web browser."""
-        webbrowser.open('https://github.com/jlgabriel/ForeFlight-Shirley-Bridge')
+        webbrowser.open('https://github.com/jlgabriel/Condor-Shirley-Bridge')
     
     def _open_github(self) -> None:
         """Open the GitHub repository in a web browser."""
-        webbrowser.open('https://github.com/jlgabriel/ForeFlight-Shirley-Bridge')
+        webbrowser.open('https://github.com/jlgabriel/Condor-Shirley-Bridge')
     
     def _show_about(self) -> None:
         """Show the about dialog."""
@@ -711,7 +711,6 @@ class MainWindow:
             "Condor-Shirley-Bridge\n\n"
             "Version: 1.0.0\n\n"
             "A bridge between Condor Soaring Simulator and FlyShirley.\n\n"
-            "Based on ForeFlight-Shirley-Bridge by Juan Luis Gabriel.\n\n"
             "© 2025 Juan Luis Gabriel"
         )
     
