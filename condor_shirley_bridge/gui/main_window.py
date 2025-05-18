@@ -81,7 +81,7 @@ class MainWindow:
     def _setup_window(self) -> None:
         """Configure the main window."""
         self.master.title("Condor-Shirley-Bridge")
-        self.master.geometry("900x750") # Set default size
+        self.master.geometry("1000x740") # Set default size
         self.master.minsize(700, 450) # Set minimum size
 
         # Rest of the method remains the same
