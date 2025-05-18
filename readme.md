@@ -259,8 +259,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Screenshots
 
-![Vista principal de la aplicación](assets/main_window.png)
+![Main application window](assets/status.png)
 
-![Panel de estado](assets/status_panel.png)
+![Log panel](assets/log.png)
 
-![Diálogo de configuración](assets/settings_dialog.png)
+![Configuration tool](assets/settings.png)
