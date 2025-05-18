@@ -256,3 +256,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Based on https://github.com/Airplane-Team/sim-interface by Airplane Team.
 - Based on https://github.com/jlgabriel/ForeFlight-Shirley-Bridge by Juan Luis Gabriel.
 - Code assistance provided by Anthropic Claude 3.7 Sonnet.
+
+## Screenshots
+
+![Vista principal de la aplicación](assets/main_window.png)
+
+![Panel de estado](assets/status_panel.png)
+
+![Diálogo de configuración](assets/settings_dialog.png)
