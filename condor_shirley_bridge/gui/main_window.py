@@ -328,49 +328,26 @@ class MainWindow:
 
     def _setup_log_handler(self) -> None:
         """Set up a custom log handler to show logs in the UI."""
+        # Importar el sistema centralizado de logs
+        from condor_shirley_bridge.core.log_config import add_text_handler
 
-        class TextHandler(logging.Handler):
-            def __init__(self, text_widget):
-                logging.Handler.__init__(self)
-                self.text_widget = text_widget  # Store reference to the widget
-
-            def emit(self, record):
-                msg = self.format(record)
-
-                def append():
-                    self.text_widget.configure(state=tk.NORMAL)
-                    self.text_widget.insert(tk.END, msg + '\n')
-                    self.text_widget.configure(state=tk.DISABLED)
-                    self.text_widget.yview(tk.END)
-
-                # Append in the main thread
-                self.text_widget.after(0, append)
-
-        # Create and add the handler
-        text_handler = TextHandler(self.log_text)
-        text_handler.setLevel(logging.INFO)  # Default to INFO level
-        text_handler.setFormatter(
-            logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        )
-
-        # Add to root logger
-        logging.getLogger().addHandler(text_handler)
-
-    def _change_log_level(self, event) -> None:
-        """Change the log level based on the combobox selection."""
+        # Obtener el nivel inicial de los ajustes o usar INFO como predeterminado
         level_str = self.log_level_var.get()
         level = logging.INFO if level_str == "INFO" else logging.DEBUG
 
-        # Find and update the text handler's level
-        for handler in logging.getLogger().handlers:
-            if isinstance(handler, logging.Handler) and hasattr(handler, 'text_widget'):
-                handler.setLevel(level)
+        # Agregar el manejador de texto
+        add_text_handler(self.log_text, level)
 
-        # Clear the log when changing levels
-        self._clear_log()
+    def _change_log_level(self, event) -> None:
+        """Change the log level based on the combobox selection."""
+        # Importar el sistema centralizado de logs
+        from condor_shirley_bridge.core.log_config import set_text_handler_level
 
-        # Log the change
-        logging.info(f"Log level changed to {level_str}")
+        level_str = self.log_level_var.get()
+        level = logging.INFO if level_str == "INFO" else logging.DEBUG
+
+        # Cambiar el nivel del manejador de texto
+        set_text_handler_level(level)
 
     def _clear_log(self) -> None:
         """Clear the log text widget."""
@@ -746,25 +723,30 @@ class MainWindow:
             "Please configure your Serial, UDP, and WebSocket settings before starting the bridge.\n\n"
             "If you need help, click on Help > Documentation."
         )
-    
+
     def _on_close(self) -> None:
         """Handle window close event."""
+        # Código existente para preguntar si cerrar con el bridge en ejecución
         if self.bridge and self.bridge.running:
             if not messagebox.askyesno(
-                "Quit",
-                "The bridge is still running. Are you sure you want to quit?"
+                    "Quit",
+                    "The bridge is still running. Are you sure you want to quit?"
             ):
                 return
-            
+
             # Stop the bridge
             self._stop_bridge()
-            
+
             # Wait a moment to let it stop cleanly
             self.master.after(200)
-        
+
+        # Eliminar el manejador de texto antes de cerrar
+        from condor_shirley_bridge.core.log_config import remove_text_handler
+        remove_text_handler()
+
         # Save settings
         self.settings.save()
-        
+
         # Destroy the window
         self.master.destroy()
 

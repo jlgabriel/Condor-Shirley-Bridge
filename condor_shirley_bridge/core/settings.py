@@ -361,7 +361,7 @@ class Settings:
         except Exception as e:
             logger.error(f"Error listing serial ports: {e}")
             return []
-    
+
     def apply_logging_settings(self) -> None:
         """Apply logging settings to the Python logging system."""
         try:
@@ -369,7 +369,7 @@ class Settings:
             log_level = self.settings.logging.level
             log_to_file = self.settings.logging.log_to_file
             log_file_path = self.settings.logging.log_file_path
-            
+
             # Convert level string to logging level
             level_map = {
                 "DEBUG": logging.DEBUG,
@@ -379,45 +379,20 @@ class Settings:
                 "CRITICAL": logging.CRITICAL
             }
             level = level_map.get(log_level, logging.INFO)
-            
-            # Configure root logger
-            root_logger = logging.getLogger()
-            root_logger.setLevel(level)
-            
-            # Remove existing handlers
-            for handler in root_logger.handlers[:]:
-                root_logger.removeHandler(handler)
-            
-            # Add console handler
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(level)
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            console_handler.setFormatter(formatter)
-            root_logger.addHandler(console_handler)
-            
-            # Add file handler if enabled
-            if log_to_file and log_file_path:
-                try:
-                    # Ensure directory exists
-                    os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
-                    
-                    # Create rotating file handler
-                    from logging.handlers import RotatingFileHandler
-                    file_handler = RotatingFileHandler(
-                        log_file_path,
-                        maxBytes=self.settings.logging.max_log_size_mb * 1024 * 1024,
-                        backupCount=self.settings.logging.max_log_files
-                    )
-                    file_handler.setLevel(level)
-                    file_handler.setFormatter(formatter)
-                    root_logger.addHandler(file_handler)
-                    
-                    logger.info(f"Logging to file: {log_file_path}")
-                except Exception as e:
-                    logger.error(f"Error setting up file logging: {e}")
-            
+
+            # Usar la configuración centralizada
+            from condor_shirley_bridge.core.log_config import configure_logging
+
+            # Configurar el sistema de logs
+            configure_logging(
+                level=level,
+                log_to_file=log_to_file,
+                log_file_path=log_file_path,
+                max_log_files=self.settings.logging.max_log_files,
+                max_log_size_mb=self.settings.logging.max_log_size_mb
+            )
+
             logger.info(f"Logging level set to {log_level}")
-            
         except Exception as e:
             logger.error(f"Error applying logging settings: {e}")
     

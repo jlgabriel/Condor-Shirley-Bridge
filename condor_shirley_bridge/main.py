@@ -20,6 +20,13 @@ from typing import Optional, Dict, Any
 # Add parent directory to path so we can import our modules
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
+# Configuración inicial de logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('main')
+
 # Import from our project structure
 from condor_shirley_bridge.core.bridge import Bridge
 from condor_shirley_bridge.core.settings import Settings
