@@ -191,6 +191,15 @@ class MainWindow:
         else:
             self.recent_menu.add_command(label="No recent configurations", state=tk.DISABLED)
 
+    # Añadir este metodo a la clase MainWindow en main_window.py
+    def _setup_log_handler(self) -> None:
+        """Set up a custom log handler to show logs in the UI."""
+        # Importar el sistema centralizado de logs
+        from condor_shirley_bridge.core.log_config import add_text_handler
+
+        # Agregar el manejador de texto
+        add_text_handler(self.log_text)
+
     def _create_widgets(self) -> None:
         """Create the main window widgets."""
         # Control panel at the top
@@ -213,20 +222,8 @@ class MainWindow:
         )
         self.settings_button.pack(side="left", padx=5)
 
-        # Add log controls to the right of the existing buttons
-        log_level_label = ttk.Label(self.control_frame, text="Log Level:")
-        log_level_label.pack(side="left", padx=(10, 2))
-
-        self.log_level_var = tk.StringVar(value="INFO")
-        self.log_level_combo = ttk.Combobox(
-            self.control_frame,
-            textvariable=self.log_level_var,
-            values=["INFO", "DEBUG"],
-            width=6,
-            state="readonly"
-        )
-        self.log_level_combo.pack(side="left", padx=2)
-        self.log_level_combo.bind("<<ComboboxSelected>>", self._change_log_level)
+        log_info_label = ttk.Label(self.control_frame, text="Log Level: INFO")
+        log_info_label.pack(side="left", padx=(10, 2))
 
         # Clear log button
         clear_log_button = ttk.Button(
@@ -326,28 +323,32 @@ class MainWindow:
         )
         self.status_bar.grid(row=2, column=0, sticky="ew")
 
-    def _setup_log_handler(self) -> None:
-        """Set up a custom log handler to show logs in the UI."""
-        # Importar el sistema centralizado de logs
-        from condor_shirley_bridge.core.log_config import add_text_handler
+    def set_text_handler_level(level: int) -> None:
+        """
+        Cambia el nivel del manejador de texto actual.
 
-        # Obtener el nivel inicial de los ajustes o usar INFO como predeterminado
-        level_str = self.log_level_var.get()
-        level = logging.INFO if level_str == "INFO" else logging.DEBUG
+        Args:
+            level: Nuevo nivel de logging
+        """
+        # Intentar buscar manejadores de texto en el logger raíz
+        root_logger = logging.getLogger()
 
-        # Agregar el manejador de texto
-        add_text_handler(self.log_text, level)
+        # Buscar manejadores de texto
+        text_handlers = []
+        for handler in root_logger.handlers:
+            # Verificar si es un manejador de texto basado en un atributo distintivo
+            if hasattr(handler, 'text_widget'):
+                text_handlers.append(handler)
 
-    def _change_log_level(self, event) -> None:
-        """Change the log level based on the combobox selection."""
-        # Importar el sistema centralizado de logs
-        from condor_shirley_bridge.core.log_config import set_text_handler_level
+        # Actualizar los manejadores encontrados
+        if text_handlers:
+            for handler in text_handlers:
+                handler.setLevel(level)
 
-        level_str = self.log_level_var.get()
-        level = logging.INFO if level_str == "INFO" else logging.DEBUG
-
-        # Cambiar el nivel del manejador de texto
-        set_text_handler_level(level)
+            # Registrar el cambio
+            logging.info(f"GUI log level set to {logging.getLevelName(level)}")
+        else:
+            logging.warning("No text handler found to change log level")
 
     def _clear_log(self) -> None:
         """Clear the log text widget."""
@@ -726,7 +727,6 @@ class MainWindow:
 
     def _on_close(self) -> None:
         """Handle window close event."""
-        # Código existente para preguntar si cerrar con el bridge en ejecución
         if self.bridge and self.bridge.running:
             if not messagebox.askyesno(
                     "Quit",

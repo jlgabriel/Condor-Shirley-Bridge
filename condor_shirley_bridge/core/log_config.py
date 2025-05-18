@@ -17,7 +17,7 @@ text_handler = None
 
 
 def configure_logging(
-        level: int = logging.INFO,
+        level: int = logging.DEBUG,  # Usar DEBUG como predeterminado para la consola
         log_to_file: bool = False,
         log_file_path: Optional[str] = None,
         max_log_files: int = 5,
@@ -27,7 +27,7 @@ def configure_logging(
     Configura el sistema de logs para toda la aplicación.
 
     Args:
-        level: Nivel de logging (por defecto INFO)
+        level: Nivel de logging para la consola (por defecto DEBUG)
         log_to_file: Si se debe guardar logs en un archivo
         log_file_path: Ruta al archivo de log (opcional)
         max_log_files: Número máximo de archivos de log para rotar
@@ -43,18 +43,18 @@ def configure_logging(
             text_handlers.append(handler)
             root_logger.removeHandler(handler)
         else:
-            # Eliminar todos los demás manejadores
+            # Eliminar los demás manejadores
             root_logger.removeHandler(handler)
 
-    # Configurar el nivel del logger raíz
-    root_logger.setLevel(level)
+    # Configurar el nivel del logger raíz para permitir todos los mensajes que necesitemos
+    root_logger.setLevel(min(level, logging.INFO))
 
     # Crear formateador estándar
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-    # Agregar manejador de consola
+    # Agregar manejador de consola con el nivel solicitado (normalmente DEBUG)
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(level)
+    console_handler.setLevel(level)  # Usar el nivel solicitado para la consola
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
@@ -71,7 +71,7 @@ def configure_logging(
                 maxBytes=max_log_size_mb * 1024 * 1024,
                 backupCount=max_log_files
             )
-            file_handler.setLevel(level)
+            file_handler.setLevel(level)  # Usar mismo nivel que la consola
             file_handler.setFormatter(formatter)
             root_logger.addHandler(file_handler)
 
@@ -79,114 +79,94 @@ def configure_logging(
         except Exception as e:
             logging.error(f"Error setting up file logging: {e}")
 
-    # Restaurar los manejadores de texto
+    # Restaurar los manejadores de texto con nivel INFO fijo
     for handler in text_handlers:
-        handler.setLevel(level)
+        # Asegurar que el nivel es INFO para la GUI
+        handler.setLevel(logging.INFO)
         root_logger.addHandler(handler)
 
-    logging.info(f"Logging system initialized with level {logging.getLevelName(level)}")
+    logging.info(f"Logging system initialized: console={logging.getLevelName(level)}, GUI=INFO")
 
 
-def create_text_handler(text_widget, level: int = logging.INFO) -> logging.Handler:
+def add_text_handler(text_widget) -> logging.Handler:
     """
-    Crea un manejador de logs para mostrar en un widget de texto de tkinter.
+    Agrega un manejador de texto para la GUI que muestra solo INFO, WARNING y ERROR.
 
     Args:
-        text_widget: Widget de texto de tkinter
-        level: Nivel de logging para este manejador
+        text_widget: Widget de texto tkinter donde mostrar los logs
 
     Returns:
-        El manejador de logs creado
+        El manejador creado
     """
     global text_handler
 
-    # Clase de manejador personalizado
     class TextHandler(logging.Handler):
         def __init__(self, text_widget):
             logging.Handler.__init__(self)
             self.text_widget = text_widget
+            self.setLevel(logging.INFO)  # Nivel fijo en INFO
+            self.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            self.max_lines = 1000  # Límite para evitar sobrecarga de memoria
 
         def emit(self, record):
             msg = self.format(record)
 
             def append():
+                if not self.text_widget.winfo_exists():
+                    return
+
                 try:
                     self.text_widget.configure(state='normal')
-                    self.text_widget.insert('end', msg + '\n')
-                    self.text_widget.configure(state='disabled')
-                    self.text_widget.see('end')  # Auto-scroll al final
-                except Exception:
-                    pass  # Ignorar errores si el widget ya no existe
 
-            # Usar after para ejecutar en el hilo principal
+                    # Colorear según el nivel
+                    if record.levelno >= logging.ERROR:
+                        self.text_widget.insert('end', msg + '\n', 'error')
+                    elif record.levelno >= logging.WARNING:
+                        self.text_widget.insert('end', msg + '\n', 'warning')
+                    else:
+                        self.text_widget.insert('end', msg + '\n', 'info')
+
+                    # Limitar el número de líneas
+                    line_count = int(self.text_widget.index('end-1c').split('.')[0])
+                    if line_count > self.max_lines:
+                        to_delete = line_count - self.max_lines
+                        self.text_widget.delete('1.0', f'{to_delete + 1}.0')
+
+                    self.text_widget.configure(state='disabled')
+                    self.text_widget.see('end')
+                except Exception as e:
+                    print(f"Error updating log widget: {e}")
+
+            # Agregar en el hilo principal
             if self.text_widget.winfo_exists():
                 self.text_widget.after(0, append)
 
+    try:
+        # Configurar etiquetas para colorear mensajes
+        text_widget.tag_configure('info', foreground='black')
+        text_widget.tag_configure('warning', foreground='orange')
+        text_widget.tag_configure('error', foreground='red')
+    except Exception as e:
+        print(f"Error configuring text tags: {e}")
+
     # Crear y configurar el manejador
     handler = TextHandler(text_widget)
-    handler.setLevel(level)
-    handler.setFormatter(
-        logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    )
-
-    # Guardar referencia global
-    text_handler = handler
-
-    return handler
-
-
-def add_text_handler(text_widget, level: int = logging.INFO) -> logging.Handler:
-    """
-    Agrega un manejador de texto al sistema de logs.
-
-    Args:
-        text_widget: Widget de texto de tkinter
-        level: Nivel de logging para este manejador
-
-    Returns:
-        El manejador de logs agregado
-    """
-    # Crear el manejador
-    handler = create_text_handler(text_widget, level)
 
     # Agregar al logger raíz
     root_logger = logging.getLogger()
 
-    # Eliminar cualquier manejador de texto existente para evitar duplicados
-    for h in root_logger.handlers[:]:
+    # Eliminar manejadores de texto existentes
+    for h in list(root_logger.handlers):
         if hasattr(h, 'text_widget'):
             root_logger.removeHandler(h)
 
-    # Agregar el nuevo manejador
     root_logger.addHandler(handler)
+    text_handler = handler
 
     # Mensaje de inicio
-    logging.info("GUI log handler initialized")
+    logging.info("Log view initialized with fixed INFO level")
 
     return handler
-
-
-def set_text_handler_level(level: int) -> None:
-    """
-    Cambia el nivel del manejador de texto actual.
-
-    Args:
-        level: Nuevo nivel de logging
-    """
-    global text_handler
-
-    if text_handler:
-        text_handler.setLevel(level)
-        logging.info(f"GUI log level set to {logging.getLevelName(level)}")
-    else:
-        # Buscar el manejador en el logger raíz
-        for handler in logging.getLogger().handlers:
-            if hasattr(handler, 'text_widget'):
-                handler.setLevel(level)
-                logging.info(f"GUI log level set to {logging.getLevelName(level)}")
-                return
-
-        logging.warning("No text handler found to change log level")
 
 
 def remove_text_handler() -> None:
