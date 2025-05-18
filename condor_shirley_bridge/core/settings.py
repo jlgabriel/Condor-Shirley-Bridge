@@ -67,12 +67,8 @@ class LogSettings:
 @dataclass
 class UISettings:
     """User interface settings"""
-    start_minimized: bool = False
-    always_on_top: bool = False
-    show_advanced: bool = False
     theme: str = "system"  # "system", "light", "dark"
     recent_configs: List[str] = field(default_factory=list)
-    startup_check_updates: bool = True
 
 
 @dataclass

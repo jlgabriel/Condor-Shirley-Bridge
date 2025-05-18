@@ -420,34 +420,7 @@ class SettingsDialog:
         """Create the UI settings tab."""
         frame = ttk.Frame(self.notebook, padding="10")
         self.notebook.add(frame, text="UI")
-        
-        # Start minimized checkbox
-        self.start_minimized_var = tk.BooleanVar()
-        self.start_minimized = ttk.Checkbutton(
-            frame,
-            text="Start Minimized",
-            variable=self.start_minimized_var
-        )
-        self.start_minimized.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=5)
-        
-        # Always on top checkbox
-        self.always_on_top_var = tk.BooleanVar()
-        self.always_on_top = ttk.Checkbutton(
-            frame,
-            text="Always on Top",
-            variable=self.always_on_top_var
-        )
-        self.always_on_top.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
-        
-        # Show advanced checkbox
-        self.show_advanced_var = tk.BooleanVar()
-        self.show_advanced = ttk.Checkbutton(
-            frame,
-            text="Show Advanced Options",
-            variable=self.show_advanced_var
-        )
-        self.show_advanced.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=5)
-        
+
         # Theme selection
         ttk.Label(frame, text="Theme:").grid(row=3, column=0, sticky=tk.W, pady=5)
         
@@ -460,15 +433,6 @@ class SettingsDialog:
             width=10
         )
         self.theme.grid(row=3, column=1, sticky=tk.W, pady=5)
-        
-        # Check for updates checkbox
-        self.check_updates_var = tk.BooleanVar()
-        self.check_updates = ttk.Checkbutton(
-            frame,
-            text="Check for Updates on Startup",
-            variable=self.check_updates_var
-        )
-        self.check_updates.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=5)
         
         # Clear recent configs button
         clear_button = ttk.Button(
@@ -521,11 +485,7 @@ class SettingsDialog:
         self._update_log_file_state()
         
         # UI settings
-        self.start_minimized_var.set(self.settings.get('ui', 'start_minimized'))
-        self.always_on_top_var.set(self.settings.get('ui', 'always_on_top'))
-        self.show_advanced_var.set(self.settings.get('ui', 'show_advanced'))
         self.theme_var.set(self.settings.get('ui', 'theme'))
-        self.check_updates_var.set(self.settings.get('ui', 'startup_check_updates'))
 
     def _save_settings(self) -> bool:
         """
@@ -564,11 +524,7 @@ class SettingsDialog:
             self.settings.set('logging', 'max_log_size_mb', self.max_log_size_var.get())
             
             # UI settings
-            self.settings.set('ui', 'start_minimized', self.start_minimized_var.get())
-            self.settings.set('ui', 'always_on_top', self.always_on_top_var.get())
-            self.settings.set('ui', 'show_advanced', self.show_advanced_var.get())
             self.settings.set('ui', 'theme', self.theme_var.get())
-            self.settings.set('ui', 'startup_check_updates', self.check_updates_var.get())
 
             # Validate settings
             validation_errors = self.settings.validate()
