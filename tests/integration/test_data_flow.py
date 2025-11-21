@@ -16,10 +16,10 @@ class TestDataFlow:
         nmea_parser = NMEAParser()
         sim_data = SimData()
 
-        # Parse NMEA sentences
+        # Parse NMEA sentences (with correct checksums)
         nmea_parser.parse_sentence("$GPGGA,170000.021,4553.3709,N,01353.4357,E,1,12,10,117.4,M,,,,,0000*02")
-        nmea_parser.parse_sentence("$GPRMC,170000.021,A,4553.3709,N,01353.4357,E,50.00,267.45,010120,,,*23")
-        nmea_parser.parse_sentence("$LXWP0,Y,60.0,117.4,2.50,,,,,,268,268,0.5*00")
+        nmea_parser.parse_sentence("$GPRMC,170000.021,A,4553.3709,N,01353.4357,E,50.00,267.45,010120,,,*14")
+        nmea_parser.parse_sentence("$LXWP0,Y,60.0,117.4,2.50,,,,,,268,268,0.5*7D")
 
         # Get combined data and update sim_data
         nmea_data = nmea_parser.get_combined_data()
@@ -60,7 +60,7 @@ height=950.0"""
         assert 'yaw_deg' in data
         assert 'pitch_deg' in data
         assert 'bank_deg' in data
-        assert 'ias_kts' in data
+        assert 'ias' in data  # sim_data normalizes ias_kts to ias for consistency
 
     def test_combined_data_flow(self):
         """Test combined data flow from both sources"""

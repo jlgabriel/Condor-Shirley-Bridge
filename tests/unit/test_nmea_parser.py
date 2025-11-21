@@ -136,7 +136,7 @@ class TestNMEAParser:
 
         # Parse both GPS and soaring data
         parser.parse_sentence("$GPGGA,170000.021,4553.3709,N,01353.4357,E,1,12,10,117.4,M,,,,,0000*02")
-        parser.parse_sentence("$LXWP0,Y,17.5,117.4,0.50,,,,,,268,268,0.0*7A")
+        parser.parse_sentence("$LXWP0,Y,17.5,117.4,0.50,,,,,,268,268,0.0*7F")
 
         combined = parser.get_combined_data()
 
