@@ -15,6 +15,7 @@ from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 import dataclasses
 from dataclasses import dataclass, field
+from condor_shirley_bridge import constants
 
 # Configure logging
 logging.basicConfig(
@@ -29,33 +30,33 @@ class SerialSettings:
     """Serial port settings for NMEA data"""
     enabled: bool = True
     port: str = "COM4"
-    baudrate: int = 4800
-    timeout: float = 1.0
-    data_freshness_threshold: float = 5.0  # seconds
-    max_retries: int = 5  # Maximum reconnection attempts
-    retry_delay: float = 2.0  # Initial delay between retries (seconds)
+    baudrate: int = constants.DEFAULT_SERIAL_BAUDRATE
+    timeout: float = constants.DEFAULT_SERIAL_TIMEOUT
+    data_freshness_threshold: float = constants.DATA_FRESHNESS_THRESHOLD
+    max_retries: int = constants.DEFAULT_MAX_RETRIES
+    retry_delay: float = constants.DEFAULT_RETRY_DELAY
 
 
 @dataclass
 class UDPSettings:
     """UDP settings for Condor data"""
     enabled: bool = True
-    host: str = "0.0.0.0"
-    port: int = 55278
-    buffer_size: int = 65535
-    data_freshness_threshold: float = 5.0  # seconds
-    max_retries: int = 5  # Maximum reconnection attempts
-    retry_delay: float = 2.0  # Initial delay between retries (seconds)
+    host: str = constants.DEFAULT_UDP_HOST
+    port: int = constants.DEFAULT_UDP_PORT
+    buffer_size: int = constants.MAX_UDP_BUFFER_SIZE
+    data_freshness_threshold: float = constants.DATA_FRESHNESS_THRESHOLD
+    max_retries: int = constants.DEFAULT_MAX_RETRIES
+    retry_delay: float = constants.DEFAULT_RETRY_DELAY
 
 
 @dataclass
 class WebSocketSettings:
     """WebSocket server settings for FlyShirley"""
     enabled: bool = True
-    host: str = "0.0.0.0"
-    port: int = 2992
-    path: str = "/api/v1"
-    broadcast_interval: float = 0.25  # seconds (4 Hz)
+    host: str = constants.DEFAULT_WEBSOCKET_HOST
+    port: int = constants.DEFAULT_WEBSOCKET_PORT
+    path: str = constants.DEFAULT_WEBSOCKET_PATH
+    broadcast_interval: float = constants.DEFAULT_BROADCAST_INTERVAL
 
 
 @dataclass
@@ -388,23 +389,23 @@ class Settings:
     def add_recent_config(self, path: str) -> None:
         """
         Add a configuration file to the recent list.
-        
+
         Args:
             path: Path to configuration file
         """
         # Normalize path
         norm_path = os.path.normpath(path)
-        
+
         # Remove if already in list
         if norm_path in self.settings.ui.recent_configs:
             self.settings.ui.recent_configs.remove(norm_path)
-        
+
         # Add to front of list
         self.settings.ui.recent_configs.insert(0, norm_path)
-        
-        # Limit list size to 10 items
-        if len(self.settings.ui.recent_configs) > 10:
-            self.settings.ui.recent_configs = self.settings.ui.recent_configs[:10]
+
+        # Limit list size
+        if len(self.settings.ui.recent_configs) > constants.MAX_RECENT_CONFIGS:
+            self.settings.ui.recent_configs = self.settings.ui.recent_configs[:constants.MAX_RECENT_CONFIGS]
     
     def get_available_serial_ports(self) -> List[str]:
         """

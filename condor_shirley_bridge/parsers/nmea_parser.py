@@ -15,19 +15,7 @@ import time
 import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple, Dict, Any, Union
-
-# Validation constants
-MAX_NMEA_LENGTH = 256  # NMEA standard maximum is ~82, but allow some buffer
-MIN_LATITUDE = -90.0
-MAX_LATITUDE = 90.0
-MIN_LONGITUDE = -180.0
-MAX_LONGITUDE = 180.0
-MAX_ALTITUDE_M = 15000.0  # 15km - maximum realistic for gliders
-MIN_ALTITUDE_M = -500.0  # Dead Sea level
-MAX_SPEED_KTS = 400.0  # Maximum realistic for gliders
-MIN_SPEED_KTS = 0.0
-MAX_VARIO_MPS = 20.0  # +/- 20 m/s is extreme but possible
-MIN_VARIO_MPS = -20.0
+from condor_shirley_bridge import constants
 
 
 @dataclass
@@ -92,8 +80,8 @@ class NMEAParser:
         Returns:
             bool: True if length is valid
         """
-        if len(sentence) > MAX_NMEA_LENGTH:
-            self.logger.warning(f"Sentence too long: {len(sentence)} chars (max: {MAX_NMEA_LENGTH})")
+        if len(sentence) > constants.MAX_NMEA_LENGTH:
+            self.logger.warning(f"Sentence too long: {len(sentence)} chars (max: {constants.MAX_NMEA_LENGTH})")
             return False
         return True
 
@@ -108,11 +96,11 @@ class NMEAParser:
         Returns:
             bool: True if coordinates are valid
         """
-        if not (MIN_LATITUDE <= latitude <= MAX_LATITUDE):
-            self.logger.error(f"Invalid latitude: {latitude} (must be between {MIN_LATITUDE} and {MAX_LATITUDE})")
+        if not (constants.MIN_LATITUDE <= latitude <= constants.MAX_LATITUDE):
+            self.logger.error(f"Invalid latitude: {latitude} (must be between {constants.MIN_LATITUDE} and {constants.MAX_LATITUDE})")
             return False
-        if not (MIN_LONGITUDE <= longitude <= MAX_LONGITUDE):
-            self.logger.error(f"Invalid longitude: {longitude} (must be between {MIN_LONGITUDE} and {MAX_LONGITUDE})")
+        if not (constants.MIN_LONGITUDE <= longitude <= constants.MAX_LONGITUDE):
+            self.logger.error(f"Invalid longitude: {longitude} (must be between {constants.MIN_LONGITUDE} and {constants.MAX_LONGITUDE})")
             return False
         return True
 
@@ -126,8 +114,8 @@ class NMEAParser:
         Returns:
             bool: True if altitude is valid
         """
-        if not (MIN_ALTITUDE_M <= altitude <= MAX_ALTITUDE_M):
-            self.logger.warning(f"Altitude out of range: {altitude}m (expected {MIN_ALTITUDE_M} to {MAX_ALTITUDE_M})")
+        if not (constants.MIN_ALTITUDE_M <= altitude <= constants.MAX_ALTITUDE_M):
+            self.logger.warning(f"Altitude out of range: {altitude}m (expected {constants.MIN_ALTITUDE_M} to {constants.MAX_ALTITUDE_M})")
             return False
         return True
 
@@ -141,8 +129,8 @@ class NMEAParser:
         Returns:
             bool: True if speed is valid
         """
-        if not (MIN_SPEED_KTS <= speed <= MAX_SPEED_KTS):
-            self.logger.warning(f"Speed out of range: {speed} kts (expected {MIN_SPEED_KTS} to {MAX_SPEED_KTS})")
+        if not (constants.MIN_SPEED_KTS <= speed <= constants.MAX_SPEED_KTS):
+            self.logger.warning(f"Speed out of range: {speed} kts (expected {constants.MIN_SPEED_KTS} to {constants.MAX_SPEED_KTS})")
             return False
         return True
 
@@ -156,8 +144,8 @@ class NMEAParser:
         Returns:
             bool: True if vario is valid
         """
-        if not (MIN_VARIO_MPS <= vario <= MAX_VARIO_MPS):
-            self.logger.warning(f"Vario out of range: {vario} m/s (expected {MIN_VARIO_MPS} to {MAX_VARIO_MPS})")
+        if not (constants.MIN_VARIO_MPS <= vario <= constants.MAX_VARIO_MPS):
+            self.logger.warning(f"Vario out of range: {vario} m/s (expected {constants.MIN_VARIO_MPS} to {constants.MAX_VARIO_MPS})")
             return False
         return True
 

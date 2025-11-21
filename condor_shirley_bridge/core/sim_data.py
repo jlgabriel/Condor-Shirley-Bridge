@@ -16,6 +16,7 @@ import asyncio
 from typing import Dict, Any, Optional, List, Set, Tuple
 from dataclasses import dataclass, field
 import math
+from condor_shirley_bridge import constants
 
 # Configure logging
 logging.basicConfig(
@@ -33,7 +34,7 @@ class DataSourceStatus:
     last_update_time: float = 0.0
     update_count: int = 0
     error_count: int = 0
-    data_freshness_threshold: float = 5.0  # seconds
+    data_freshness_threshold: float = constants.DATA_FRESHNESS_THRESHOLD
     
     @property
     def is_fresh(self) -> bool:
@@ -88,7 +89,7 @@ class SimData:
             "attitude": [],
             "motion": []
         }
-        self._history_max_size = 20  # Number of historical samples to keep
+        self._history_max_size = constants.HISTORY_MAX_SIZE
         
         # Keep track of available fields from each source
         self._source_fields: Dict[str, Set[str]] = {

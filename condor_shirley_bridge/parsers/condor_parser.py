@@ -12,19 +12,7 @@ import time
 import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Any, Union
-
-# Validation constants
-MAX_MESSAGE_LENGTH = 4096  # Maximum UDP message length
-MAX_ALTITUDE_M = 15000.0  # 15km - maximum realistic
-MIN_ALTITUDE_M = -500.0  # Dead Sea level
-MAX_AIRSPEED_MPS = 150.0  # ~291 knots
-MIN_AIRSPEED_MPS = 0.0
-MAX_VARIO_MPS = 20.0  # +/- 20 m/s
-MIN_VARIO_MPS = -20.0
-MAX_G_FORCE = 10.0  # Maximum G-force
-MIN_G_FORCE = -5.0  # Negative G
-MAX_HEIGHT_AGL = 15000.0  # Maximum height above ground
-MIN_HEIGHT_AGL = -10.0  # Allow some negative for ground contact
+from condor_shirley_bridge import constants
 
 # Configure logging
 logger = logging.getLogger('condor_parser')
@@ -106,8 +94,8 @@ class CondorUDPParser:
         Returns:
             bool: True if length is valid
         """
-        if len(message) > MAX_MESSAGE_LENGTH:
-            logger.warning(f"Message too long: {len(message)} chars (max: {MAX_MESSAGE_LENGTH})")
+        if len(message) > constants.MAX_UDP_MESSAGE_LENGTH:
+            logger.warning(f"Message too long: {len(message)} chars (max: {constants.MAX_UDP_MESSAGE_LENGTH})")
             return False
         return True
 
@@ -215,25 +203,25 @@ class CondorUDPParser:
 
         # Validate critical values
         if 'altitude' in data_dict:
-            self._validate_numeric_value('altitude', data_dict['altitude'], MIN_ALTITUDE_M, MAX_ALTITUDE_M)
+            self._validate_numeric_value('altitude', data_dict['altitude'], constants.MIN_ALTITUDE_M, constants.MAX_ALTITUDE_M)
 
         if 'airspeed' in data_dict:
-            self._validate_numeric_value('airspeed', data_dict['airspeed'], MIN_AIRSPEED_MPS, MAX_AIRSPEED_MPS)
+            self._validate_numeric_value('airspeed', data_dict['airspeed'], constants.MIN_AIRSPEED_MPS, constants.MAX_AIRSPEED_MPS)
 
         if 'vario' in data_dict:
-            self._validate_numeric_value('vario', data_dict['vario'], MIN_VARIO_MPS, MAX_VARIO_MPS)
+            self._validate_numeric_value('vario', data_dict['vario'], constants.MIN_VARIO_MPS, constants.MAX_VARIO_MPS)
 
         if 'evario' in data_dict:
-            self._validate_numeric_value('evario', data_dict['evario'], MIN_VARIO_MPS, MAX_VARIO_MPS)
+            self._validate_numeric_value('evario', data_dict['evario'], constants.MIN_VARIO_MPS, constants.MAX_VARIO_MPS)
 
         if 'nettovario' in data_dict:
-            self._validate_numeric_value('nettovario', data_dict['nettovario'], MIN_VARIO_MPS, MAX_VARIO_MPS)
+            self._validate_numeric_value('nettovario', data_dict['nettovario'], constants.MIN_VARIO_MPS, constants.MAX_VARIO_MPS)
 
         if 'gforce' in data_dict:
-            self._validate_numeric_value('gforce', data_dict['gforce'], MIN_G_FORCE, MAX_G_FORCE)
+            self._validate_numeric_value('gforce', data_dict['gforce'], constants.MIN_G_FORCE, constants.MAX_G_FORCE)
 
         if 'height' in data_dict:
-            self._validate_numeric_value('height', data_dict['height'], MIN_HEIGHT_AGL, MAX_HEIGHT_AGL)
+            self._validate_numeric_value('height', data_dict['height'], constants.MIN_HEIGHT_AGL, constants.MAX_HEIGHT_AGL)
 
         # Create new motion data object with default values for missing fields
         self.motion_data = CondorMotionData(

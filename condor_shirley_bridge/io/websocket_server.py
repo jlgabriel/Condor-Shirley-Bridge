@@ -18,6 +18,7 @@ from typing import Dict, Set, Any, Optional, Callable
 
 import websockets
 from websockets.legacy.server import WebSocketServerProtocol, serve
+from condor_shirley_bridge import constants
 
 # Configure logging
 logging.basicConfig(
@@ -66,7 +67,7 @@ class WebSocketServer:
         # Broadcast control
         self.running = False
         self.broadcast_task = None
-        self.broadcast_interval = 0.25  # 4 Hz by default
+        self.broadcast_interval = constants.DEFAULT_BROADCAST_INTERVAL
 
         # Statistics
         self.total_connections = 0

@@ -15,6 +15,7 @@ import asyncio
 from typing import Optional, Callable, Any, Dict, Union
 import queue
 import logging
+from condor_shirley_bridge import constants
 
 # Configure logging
 logging.basicConfig(
@@ -62,7 +63,7 @@ class UDPReceiver:
         self.running = False
 
         # Queue for storing UDP messages (for async interface)
-        self.data_queue = queue.Queue(maxsize=100)
+        self.data_queue = queue.Queue(maxsize=constants.UDP_QUEUE_MAX_SIZE)
 
         # Statistics
         self.bytes_received = 0
@@ -242,15 +243,15 @@ class UDPReceiver:
     
     def is_receiving_data(self) -> bool:
         """
-        Check if we're actively receiving data (in the last 5 seconds).
-        
+        Check if we're actively receiving data.
+
         Returns:
             bool: True if receiving data, False otherwise
         """
         if not self.last_received_time:
             return False
-        
-        return (time.time() - self.last_received_time) < 5.0
+
+        return (time.time() - self.last_received_time) < constants.DATA_FRESHNESS_THRESHOLD
     
     def set_port(self, port: int) -> bool:
         """
