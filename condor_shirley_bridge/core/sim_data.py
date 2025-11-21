@@ -16,6 +16,7 @@ import asyncio
 from typing import Dict, Any, Optional, List, Set, Tuple
 from dataclasses import dataclass, field
 import math
+from condor_shirley_bridge import constants
 
 # Configure logging
 logging.basicConfig(
@@ -33,7 +34,7 @@ class DataSourceStatus:
     last_update_time: float = 0.0
     update_count: int = 0
     error_count: int = 0
-    data_freshness_threshold: float = 5.0  # seconds
+    data_freshness_threshold: float = constants.DATA_FRESHNESS_THRESHOLD
     
     @property
     def is_fresh(self) -> bool:
@@ -88,21 +89,22 @@ class SimData:
             "attitude": [],
             "motion": []
         }
-        self._history_max_size = 20  # Number of historical samples to keep
-        
+        self._history_max_size = constants.HISTORY_MAX_SIZE
+        self._update_counter = 0  # Track updates for periodic cleanup
+
         # Keep track of available fields from each source
         self._source_fields: Dict[str, Set[str]] = {
             "nmea": set(),
             "condor_udp": set()
         }
-        
+
         # Timestamp of last update
         self._last_update_time = 0.0
     
     def update_from_nmea(self, nmea_data: Dict[str, Any]) -> None:
         """
         Update the simulation data with NMEA data.
-        
+
         Args:
             nmea_data: Dictionary of NMEA data from NMEAParser
         """
@@ -110,24 +112,29 @@ class SimData:
             # Skip if no data
             if not nmea_data:
                 return
-                
+
             # Track fields provided by NMEA
             self._source_fields["nmea"].update(nmea_data.keys())
-            
+
             # Update the data dictionary
             # We selectively merge, as NMEA data might be incomplete or less accurate for some fields
             self._merge_nmea_data(nmea_data)
-            
+
             # Update source status
             self._sources["nmea"].update()
-            
+
             # Update last update time
             self._last_update_time = time.time()
+
+            # Periodic cleanup of old history data
+            self._update_counter += 1
+            if self._update_counter % constants.HISTORY_CLEANUP_INTERVAL == 0:
+                self._cleanup_old_history()
     
     def update_from_condor_udp(self, udp_data: Dict[str, Any]) -> None:
         """
         Update the simulation data with Condor UDP data.
-        
+
         Args:
             udp_data: Dictionary of UDP data from CondorUDPParser
         """
@@ -135,19 +142,24 @@ class SimData:
             # Skip if no data
             if not udp_data:
                 return
-                
+
             # Track fields provided by Condor UDP
             self._source_fields["condor_udp"].update(udp_data.keys())
-            
+
             # Update the data dictionary
             # We selectively merge, as UDP data might be more accurate for some fields
             self._merge_udp_data(udp_data)
-            
+
             # Update source status
             self._sources["condor_udp"].update()
-            
+
             # Update last update time
             self._last_update_time = time.time()
+
+            # Periodic cleanup of old history data
+            self._update_counter += 1
+            if self._update_counter % constants.HISTORY_CLEANUP_INTERVAL == 0:
+                self._cleanup_old_history()
     
     def _merge_nmea_data(self, nmea_data: Dict[str, Any]) -> None:
         """
@@ -291,7 +303,7 @@ class SimData:
     def _add_to_history(self, category: str, data: Dict[str, Any]) -> None:
         """
         Add a data point to the historical record for interpolation.
-        
+
         Args:
             category: Category of data ('position', 'attitude', 'motion')
             data: Data point to add
@@ -300,13 +312,32 @@ class SimData:
             # Ensure the timestamp is included
             if "timestamp" not in data:
                 data["timestamp"] = time.time()
-                
+
             # Add to history
             self._history[category].append(data)
-            
+
             # Limit history size
             if len(self._history[category]) > self._history_max_size:
                 self._history[category].pop(0)
+
+    def _cleanup_old_history(self) -> None:
+        """
+        Clean up old history entries that exceed the maximum age.
+        This prevents memory leaks from stale historical data.
+        """
+        current_time = time.time()
+        max_age = constants.HISTORY_MAX_AGE
+
+        for category in self._history:
+            # Remove entries older than max_age
+            self._history[category] = [
+                entry for entry in self._history[category]
+                if current_time - entry.get("timestamp", 0) < max_age
+            ]
+
+            # Log cleanup if significant data was removed
+            if len(self._history[category]) == 0:
+                logger.debug(f"History cleanup: All {category} entries were stale")
 
     def get_data(self) -> Dict[str, Any]:
         with self._lock:

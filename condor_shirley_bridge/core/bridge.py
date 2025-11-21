@@ -22,6 +22,7 @@ from condor_shirley_bridge.io.udp_receiver import UDPReceiver
 from condor_shirley_bridge.io.websocket_server import WebSocketServer
 from condor_shirley_bridge.core.sim_data import SimData
 from condor_shirley_bridge.core.settings import Settings
+from condor_shirley_bridge import constants
 
 # Configure logging
 logging.basicConfig(
@@ -260,12 +261,12 @@ class Bridge:
         try:
             while self.running:
                 await self._check_components()
-                await asyncio.sleep(1.0)  # Check every second
-                
+                await asyncio.sleep(constants.COMPONENT_CHECK_INTERVAL)
+
         except asyncio.CancelledError:
             logger.info("Main loop cancelled")
             raise
-            
+
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
             self.error_count += 1
@@ -276,7 +277,7 @@ class Bridge:
             # Add timeout to prevent blocking
             await asyncio.wait_for(
                 self._actual_check_components(),
-                timeout=5.0
+                timeout=constants.COMPONENT_CHECK_TIMEOUT
             )
         except asyncio.TimeoutError:
             logger.error("Component check timed out")
@@ -315,11 +316,11 @@ class Bridge:
         # Check if we're receiving data from any source
         if not self.sim_data.is_active():
             data_age = time.time() - self.sim_data.get_last_update_time()
-            if data_age > 10.0 and self.sim_data.get_last_update_time() > 0:
+            if data_age > constants.NO_DATA_WARNING_THRESHOLD and self.sim_data.get_last_update_time() > 0:
                 logger.warning(f"No data received for {data_age:.1f} seconds")
 
-        # Log component status at lower frequency (every 10 seconds)
-        if int(time.time()) % 10 == 0:
+        # Log component status at lower frequency
+        if int(time.time()) % constants.LOG_STATUS_INTERVAL == 0:
             self._log_status()
     
     def _log_status(self) -> None:
