@@ -32,6 +32,8 @@ class SerialSettings:
     baudrate: int = 4800
     timeout: float = 1.0
     data_freshness_threshold: float = 5.0  # seconds
+    max_retries: int = 5  # Maximum reconnection attempts
+    retry_delay: float = 2.0  # Initial delay between retries (seconds)
 
 
 @dataclass
@@ -42,6 +44,8 @@ class UDPSettings:
     port: int = 55278
     buffer_size: int = 65535
     data_freshness_threshold: float = 5.0  # seconds
+    max_retries: int = 5  # Maximum reconnection attempts
+    retry_delay: float = 2.0  # Initial delay between retries (seconds)
 
 
 @dataclass

@@ -16,6 +16,19 @@ import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple, Dict, Any, Union
 
+# Validation constants
+MAX_NMEA_LENGTH = 256  # NMEA standard maximum is ~82, but allow some buffer
+MIN_LATITUDE = -90.0
+MAX_LATITUDE = 90.0
+MIN_LONGITUDE = -180.0
+MAX_LONGITUDE = 180.0
+MAX_ALTITUDE_M = 15000.0  # 15km - maximum realistic for gliders
+MIN_ALTITUDE_M = -500.0  # Dead Sea level
+MAX_SPEED_KTS = 400.0  # Maximum realistic for gliders
+MIN_SPEED_KTS = 0.0
+MAX_VARIO_MPS = 20.0  # +/- 20 m/s is extreme but possible
+MIN_VARIO_MPS = -20.0
+
 
 @dataclass
 class GPSPosition:
@@ -69,6 +82,85 @@ class NMEAParser:
             "LXWP0": re.compile(r'^\$LXWP0')
         }
 
+    def _validate_sentence_length(self, sentence: str) -> bool:
+        """
+        Validate NMEA sentence length.
+
+        Args:
+            sentence: NMEA sentence to validate
+
+        Returns:
+            bool: True if length is valid
+        """
+        if len(sentence) > MAX_NMEA_LENGTH:
+            self.logger.warning(f"Sentence too long: {len(sentence)} chars (max: {MAX_NMEA_LENGTH})")
+            return False
+        return True
+
+    def _validate_coordinates(self, latitude: float, longitude: float) -> bool:
+        """
+        Validate latitude and longitude values.
+
+        Args:
+            latitude: Latitude in decimal degrees
+            longitude: Longitude in decimal degrees
+
+        Returns:
+            bool: True if coordinates are valid
+        """
+        if not (MIN_LATITUDE <= latitude <= MAX_LATITUDE):
+            self.logger.error(f"Invalid latitude: {latitude} (must be between {MIN_LATITUDE} and {MAX_LATITUDE})")
+            return False
+        if not (MIN_LONGITUDE <= longitude <= MAX_LONGITUDE):
+            self.logger.error(f"Invalid longitude: {longitude} (must be between {MIN_LONGITUDE} and {MAX_LONGITUDE})")
+            return False
+        return True
+
+    def _validate_altitude(self, altitude: float) -> bool:
+        """
+        Validate altitude value.
+
+        Args:
+            altitude: Altitude in meters
+
+        Returns:
+            bool: True if altitude is valid
+        """
+        if not (MIN_ALTITUDE_M <= altitude <= MAX_ALTITUDE_M):
+            self.logger.warning(f"Altitude out of range: {altitude}m (expected {MIN_ALTITUDE_M} to {MAX_ALTITUDE_M})")
+            return False
+        return True
+
+    def _validate_speed(self, speed: float) -> bool:
+        """
+        Validate speed value.
+
+        Args:
+            speed: Speed in knots
+
+        Returns:
+            bool: True if speed is valid
+        """
+        if not (MIN_SPEED_KTS <= speed <= MAX_SPEED_KTS):
+            self.logger.warning(f"Speed out of range: {speed} kts (expected {MIN_SPEED_KTS} to {MAX_SPEED_KTS})")
+            return False
+        return True
+
+    def _validate_vario(self, vario: float) -> bool:
+        """
+        Validate variometer value.
+
+        Args:
+            vario: Vertical speed in m/s
+
+        Returns:
+            bool: True if vario is valid
+        """
+        if not (MIN_VARIO_MPS <= vario <= MAX_VARIO_MPS):
+            self.logger.warning(f"Vario out of range: {vario} m/s (expected {MIN_VARIO_MPS} to {MAX_VARIO_MPS})")
+            return False
+        return True
+
     def parse_sentence(self, sentence: str) -> bool:
         """
         Parse an NMEA sentence and update the corresponding data object
@@ -78,6 +170,10 @@ class NMEAParser:
 
         # Quick check for empty input
         if not sentence:
+            return False
+
+        # Validate sentence length
+        if not self._validate_sentence_length(sentence):
             return False
 
         # Check for checksum validity (if present)
@@ -168,6 +264,16 @@ class NMEAParser:
             sats = int(satellites) if satellites else 0
             alt_msl = float(altitude) if altitude else 0.0
 
+            # Validate coordinates
+            if not self._validate_coordinates(latitude, longitude):
+                self.logger.error(f"Invalid coordinates in GPGGA: lat={latitude}, lon={longitude}")
+                return False
+
+            # Validate altitude
+            if not self._validate_altitude(alt_msl):
+                self.logger.warning(f"Suspicious altitude in GPGGA: {alt_msl}m")
+                # Don't return False, just warn - altitude could be temporarily invalid
+
             # Update GPS position (only partial data from GGA)
             if not self.gps_position:
                 self.gps_position = GPSPosition(
@@ -254,6 +360,16 @@ class NMEAParser:
             track_true = float(course) if course else 0.0
             is_valid = (status == 'A')
 
+            # Validate coordinates
+            if not self._validate_coordinates(latitude, longitude):
+                self.logger.error(f"Invalid coordinates in GPRMC: lat={latitude}, lon={longitude}")
+                return False
+
+            # Validate speed
+            if not self._validate_speed(ground_speed):
+                self.logger.warning(f"Suspicious speed in GPRMC: {ground_speed} kts")
+                # Don't return False, just warn
+
             # Create or update GPS position
             if not self.gps_position:
                 self.gps_position = GPSPosition(
@@ -331,6 +447,19 @@ class NMEAParser:
             # Log the extracted values for debugging
             self.logger.debug(f"LXWP0 extracted values: IAS={ias}, Baro={baro_alt}, Vario={vario}, "
                               f"AvgVario={avg_vario}, Heading={heading}, Track={track}, TurnRate={turn_rate}")
+
+            # Validate values
+            if not self._validate_speed(ias):
+                self.logger.warning(f"Suspicious IAS in LXWP0: {ias} kts")
+                # Don't return False, just warn
+
+            if not self._validate_altitude(baro_alt):
+                self.logger.warning(f"Suspicious barometric altitude in LXWP0: {baro_alt}m")
+                # Don't return False, just warn
+
+            if not self._validate_vario(vario):
+                self.logger.warning(f"Suspicious vario in LXWP0: {vario} m/s")
+                # Don't return False, just warn
 
             # Use current time or GPS time if available
             timestamp = self.gps_position.timestamp if self.gps_position else time.time()

@@ -21,7 +21,16 @@ Based on ForeFlight-Shirley-Bridge by Juan Luis Gabriel.
 from condor_shirley_bridge.parsers import NMEAParser, CondorUDPParser
 from condor_shirley_bridge.io import SerialReader, UDPReceiver, WebSocketServer
 from condor_shirley_bridge.core import SimData, Settings, Bridge
-from condor_shirley_bridge.gui import MainWindow, StatusPanel, SettingsDialog
+
+# Optional GUI imports - don't fail if tkinter is not available
+try:
+    from condor_shirley_bridge.gui import MainWindow, StatusPanel, SettingsDialog
+    _GUI_AVAILABLE = True
+except ImportError:
+    MainWindow = None
+    StatusPanel = None
+    SettingsDialog = None
+    _GUI_AVAILABLE = False
 
 __version__ = "1.0.0"
 __author__ = "Juan Luis Gabriel"
@@ -31,5 +40,8 @@ __all__ = [
     'NMEAParser', 'CondorUDPParser',
     'SerialReader', 'UDPReceiver', 'WebSocketServer',
     'SimData', 'Settings', 'Bridge',
-    'MainWindow', 'StatusPanel', 'SettingsDialog'
 ]
+
+# Only add GUI components if available
+if _GUI_AVAILABLE:
+    __all__.extend(['MainWindow', 'StatusPanel', 'SettingsDialog'])

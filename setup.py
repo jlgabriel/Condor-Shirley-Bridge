@@ -8,8 +8,11 @@ Part of the Condor-Shirley-Bridge project.
 """
 
 from setuptools import setup, find_packages
+import os
 
-with open("README.md", "r", encoding="utf-8") as fh:
+# Try to read readme with either case
+readme_file = "README.md" if os.path.exists("README.md") else "readme.md"
+with open(readme_file, "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
@@ -27,6 +30,14 @@ setup(
         "pyserial>=3.5",
         "websockets>=10.0",
     ],
+    extras_require={
+        "dev": [
+            "pytest>=7.0",
+            "pytest-cov>=4.0",
+            "pytest-asyncio>=0.21",
+            "black>=23.0",
+        ],
+    },
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: End Users/Desktop",
