@@ -59,6 +59,7 @@ class DataSourceStatus:
     def disconnect(self) -> None:
         """Mark as disconnected"""
         self.connected = False
+        self.last_update_time = 0.0
 
 
 class SimData:
