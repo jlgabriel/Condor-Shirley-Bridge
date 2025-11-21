@@ -29,41 +29,48 @@ class SerialReader:
     Reads NMEA data from a serial port and passes it to a callback
     function for processing.
     """
-    def __init__(self, 
-                 port: str = 'COM4', 
+    def __init__(self,
+                 port: str = 'COM4',
                  baudrate: int = 4800,
                  timeout: float = 1.0,
-                 data_callback: Optional[Callable[[str], Any]] = None):
+                 data_callback: Optional[Callable[[str], Any]] = None,
+                 max_retries: int = 5,
+                 retry_delay: float = 2.0):
         """
         Initialize the serial reader.
-        
+
         Args:
             port: The serial port to connect to (e.g., 'COM4', '/dev/ttyS0')
             baudrate: The baudrate to use
             timeout: Read timeout in seconds
             data_callback: Callback function to process received data
+            max_retries: Maximum number of reconnection attempts (default: 5)
+            retry_delay: Initial delay between reconnection attempts in seconds (default: 2.0)
         """
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
         self.data_callback = data_callback
-        
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+
         # Serial connection
         self.serial_conn: Optional[serial.Serial] = None
-        
+
         # Thread for reading from serial port
         self.read_thread: Optional[threading.Thread] = None
         self.running = False
-        
+
         # Queue for storing serial data (for async interface)
-        self.data_queue = queue.Queue()
-        
+        self.data_queue = queue.Queue(maxsize=100)
+
         # Statistics
         self.bytes_received = 0
         self.lines_received = 0
         self.start_time = 0
         self.error_count = 0
         self.last_received_time = 0
+        self.reconnect_attempts = 0
     
     def open(self) -> bool:
         """
@@ -92,7 +99,37 @@ class SerialReader:
             logger.error(f"Error opening serial port {self.port}: {e}")
             self.error_count += 1
             return False
-    
+
+    async def auto_reconnect(self) -> bool:
+        """
+        Attempt to reconnect automatically with exponential backoff.
+
+        Returns:
+            bool: True if reconnection was successful, False otherwise
+        """
+        self.reconnect_attempts = 0
+
+        while self.reconnect_attempts < self.max_retries and self.running:
+            # Calculate delay with exponential backoff
+            delay = self.retry_delay * (2 ** self.reconnect_attempts)
+            logger.info(f"Reconnection attempt {self.reconnect_attempts + 1}/{self.max_retries} "
+                       f"for serial port {self.port} in {delay:.1f}s")
+
+            await asyncio.sleep(delay)
+
+            # Attempt to reconnect
+            if self.open():
+                logger.info(f"Serial port {self.port} reconnected successfully")
+                self.reconnect_attempts = 0
+                return True
+
+            self.reconnect_attempts += 1
+
+        if self.reconnect_attempts >= self.max_retries:
+            logger.error(f"Failed to reconnect serial port {self.port} after {self.max_retries} attempts")
+
+        return False
+
     def close(self) -> None:
         """Close the serial connection and stop the read thread."""
         self.running = False

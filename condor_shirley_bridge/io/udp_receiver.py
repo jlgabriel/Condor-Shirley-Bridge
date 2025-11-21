@@ -29,41 +29,48 @@ class UDPReceiver:
     Receives UDP messages from Condor Soaring Simulator and 
     passes them to a callback function for processing.
     """
-    def __init__(self, 
+    def __init__(self,
                  host: str = '0.0.0.0',
                  port: int = 55278,
                  buffer_size: int = 65535,
-                 data_callback: Optional[Callable[[str], Any]] = None):
+                 data_callback: Optional[Callable[[str], Any]] = None,
+                 max_retries: int = 5,
+                 retry_delay: float = 2.0):
         """
         Initialize the UDP receiver.
-        
+
         Args:
             host: Host to bind to ('0.0.0.0' for all interfaces)
             port: UDP port to listen on
             buffer_size: Size of the receive buffer
             data_callback: Callback function to process received data
+            max_retries: Maximum number of reconnection attempts (default: 5)
+            retry_delay: Initial delay between reconnection attempts in seconds (default: 2.0)
         """
         self.host = host
         self.port = port
         self.buffer_size = buffer_size
         self.data_callback = data_callback
-        
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+
         # UDP socket
         self.socket: Optional[socket.socket] = None
-        
+
         # Thread for receiving UDP messages
         self.receive_thread: Optional[threading.Thread] = None
         self.running = False
-        
+
         # Queue for storing UDP messages (for async interface)
-        self.data_queue = queue.Queue()
-        
+        self.data_queue = queue.Queue(maxsize=100)
+
         # Statistics
         self.bytes_received = 0
         self.messages_received = 0
         self.start_time = 0
         self.error_count = 0
         self.last_received_time = 0
+        self.reconnect_attempts = 0
     
     def open(self) -> bool:
         """
@@ -94,7 +101,37 @@ class UDPReceiver:
             logger.error(f"Error opening UDP socket: {e}")
             self.error_count += 1
             return False
-    
+
+    async def auto_reconnect(self) -> bool:
+        """
+        Attempt to reconnect automatically with exponential backoff.
+
+        Returns:
+            bool: True if reconnection was successful, False otherwise
+        """
+        self.reconnect_attempts = 0
+
+        while self.reconnect_attempts < self.max_retries and self.running:
+            # Calculate delay with exponential backoff
+            delay = self.retry_delay * (2 ** self.reconnect_attempts)
+            logger.info(f"Reconnection attempt {self.reconnect_attempts + 1}/{self.max_retries} "
+                       f"for UDP socket {self.host}:{self.port} in {delay:.1f}s")
+
+            await asyncio.sleep(delay)
+
+            # Attempt to reconnect
+            if self.open():
+                logger.info(f"UDP socket {self.host}:{self.port} reconnected successfully")
+                self.reconnect_attempts = 0
+                return True
+
+            self.reconnect_attempts += 1
+
+        if self.reconnect_attempts >= self.max_retries:
+            logger.error(f"Failed to reconnect UDP socket {self.host}:{self.port} after {self.max_retries} attempts")
+
+        return False
+
     def close(self) -> None:
         """Close the UDP socket and stop the receive thread."""
         self.running = False

@@ -80,16 +80,20 @@ class Bridge:
             port=serial_settings.port,
             baudrate=serial_settings.baudrate,
             timeout=serial_settings.timeout,
-            data_callback=self._handle_serial_data
+            data_callback=self._handle_serial_data,
+            max_retries=serial_settings.max_retries,
+            retry_delay=serial_settings.retry_delay
         )
-        
+
         # UDP Receiver
         udp_settings = self.settings.get('udp')
         self.udp_receiver = UDPReceiver(
             host=udp_settings.host,
             port=udp_settings.port,
             buffer_size=udp_settings.buffer_size,
-            data_callback=self._handle_udp_data
+            data_callback=self._handle_udp_data,
+            max_retries=udp_settings.max_retries,
+            retry_delay=udp_settings.retry_delay
         )
 
         # WebSocket Server
@@ -268,26 +272,52 @@ class Bridge:
     
     async def _check_components(self) -> None:
         """Check the status of all components and handle issues."""
+        try:
+            # Add timeout to prevent blocking
+            await asyncio.wait_for(
+                self._actual_check_components(),
+                timeout=5.0
+            )
+        except asyncio.TimeoutError:
+            logger.error("Component check timed out")
+            self.error_count += 1
+
+    async def _actual_check_components(self) -> None:
+        """Actual component checking logic."""
         # Check serial reader
         if self.settings.get('serial', 'enabled'):
             serial_status = self.serial_reader.get_status()
-            if not serial_status["connected"]:
-                logger.warning("Serial reader disconnected")
-                # Could attempt reconnection here
-        
+            if not serial_status["connected"] and serial_status["running"]:
+                logger.warning("Serial reader disconnected, attempting reconnection...")
+                # Attempt reconnection
+                if await self.serial_reader.auto_reconnect():
+                    logger.info("Serial reader reconnected successfully")
+                    # Restart reading if reconnection was successful
+                    if not self.serial_reader.start_reading():
+                        logger.error("Failed to restart serial reader after reconnection")
+                else:
+                    logger.error("Serial reader reconnection failed")
+
         # Check UDP receiver
         if self.settings.get('udp', 'enabled'):
             udp_status = self.udp_receiver.get_status()
-            if not udp_status["bound"]:
-                logger.warning("UDP receiver not bound")
-                # Could attempt rebinding here
-        
+            if not udp_status["bound"] and udp_status["running"]:
+                logger.warning("UDP receiver not bound, attempting reconnection...")
+                # Attempt reconnection
+                if await self.udp_receiver.auto_reconnect():
+                    logger.info("UDP receiver reconnected successfully")
+                    # Restart receiving if reconnection was successful
+                    if not self.udp_receiver.start_receiving():
+                        logger.error("Failed to restart UDP receiver after reconnection")
+                else:
+                    logger.error("UDP receiver reconnection failed")
+
         # Check if we're receiving data from any source
         if not self.sim_data.is_active():
             data_age = time.time() - self.sim_data.get_last_update_time()
             if data_age > 10.0 and self.sim_data.get_last_update_time() > 0:
                 logger.warning(f"No data received for {data_age:.1f} seconds")
-        
+
         # Log component status at lower frequency (every 10 seconds)
         if int(time.time()) % 10 == 0:
             self._log_status()
@@ -358,57 +388,66 @@ class Bridge:
 
         return result
     
-    def update_settings(self, new_settings: Optional[str] = None) -> bool:
+    async def update_settings_async(self, new_settings: Optional[str] = None) -> bool:
         """
-        Update settings and reconfigure components.
-        
+        Update settings and reconfigure components (async version).
+
         Args:
             new_settings: Path to new settings file (optional)
-            
+
         Returns:
             bool: True if settings were updated and applied successfully
         """
         # Already running? Stop first
         was_running = self.running
         if was_running:
-            # Create a new event loop for synchronous calls
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            # Stop the bridge
-            loop.run_until_complete(self.stop())
-            
-            loop.close()
-        
+            await self.stop()
+
         # Load new settings
         if new_settings:
             success = self.settings.load(new_settings)
         else:
             success = self.settings.load()
-        
+
         if not success:
             logger.error("Failed to load new settings")
             return False
-        
+
         # Apply logging settings
         self.settings.apply_logging_settings()
-        
+
         # Reinitialize IO components
         self._init_io_components()
-        
+
         # Restart if was running
         if was_running:
-            # Create a new event loop for synchronous calls
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            # Start the bridge
-            loop.run_until_complete(self.start())
-            
-            loop.close()
-        
+            await self.start()
+
         logger.info("Settings updated successfully")
         return True
+
+    def update_settings(self, new_settings: Optional[str] = None) -> bool:
+        """
+        Update settings and reconfigure components (synchronous wrapper).
+
+        Args:
+            new_settings: Path to new settings file (optional)
+
+        Returns:
+            bool: True if settings were updated and applied successfully
+        """
+        try:
+            # Try to use current event loop if available
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're already in an async context, we can't use run_until_complete
+                logger.warning("update_settings called from async context, use update_settings_async instead")
+                return False
+            else:
+                return loop.run_until_complete(self.update_settings_async(new_settings))
+        except RuntimeError:
+            # No event loop exists, create one
+            return asyncio.run(self.update_settings_async(new_settings))
 
 
 # Example usage:

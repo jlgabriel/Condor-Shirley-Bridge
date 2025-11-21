@@ -9,8 +9,25 @@ Part of the Condor-Shirley-Bridge project.
 
 import re
 import time
+import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Any, Union
+
+# Validation constants
+MAX_MESSAGE_LENGTH = 4096  # Maximum UDP message length
+MAX_ALTITUDE_M = 15000.0  # 15km - maximum realistic
+MIN_ALTITUDE_M = -500.0  # Dead Sea level
+MAX_AIRSPEED_MPS = 150.0  # ~291 knots
+MIN_AIRSPEED_MPS = 0.0
+MAX_VARIO_MPS = 20.0  # +/- 20 m/s
+MIN_VARIO_MPS = -20.0
+MAX_G_FORCE = 10.0  # Maximum G-force
+MIN_G_FORCE = -5.0  # Negative G
+MAX_HEIGHT_AGL = 15000.0  # Maximum height above ground
+MIN_HEIGHT_AGL = -10.0  # Allow some negative for ground contact
+
+# Configure logging
+logger = logging.getLogger('condor_parser')
 
 
 @dataclass
@@ -78,7 +95,40 @@ class CondorUDPParser:
         
         # Compiled regex for key=value pairs
         self.kv_pattern = re.compile(r'([a-zA-Z_]+)=([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)')
-    
+
+    def _validate_message_length(self, message: str) -> bool:
+        """
+        Validate message length.
+
+        Args:
+            message: UDP message to validate
+
+        Returns:
+            bool: True if length is valid
+        """
+        if len(message) > MAX_MESSAGE_LENGTH:
+            logger.warning(f"Message too long: {len(message)} chars (max: {MAX_MESSAGE_LENGTH})")
+            return False
+        return True
+
+    def _validate_numeric_value(self, name: str, value: float, min_val: float, max_val: float) -> bool:
+        """
+        Validate a numeric value is within expected range.
+
+        Args:
+            name: Name of the value (for logging)
+            value: Value to validate
+            min_val: Minimum valid value
+            max_val: Maximum valid value
+
+        Returns:
+            bool: True if value is valid
+        """
+        if not (min_val <= value <= max_val):
+            logger.warning(f"{name} out of range: {value} (expected {min_val} to {max_val})")
+            return False
+        return True
+
     def parse_message(self, message: str) -> bool:
         """
         Parse a UDP message from Condor in key=value format
@@ -86,7 +136,11 @@ class CondorUDPParser:
         """
         if not message:
             return False
-            
+
+        # Validate message length
+        if not self._validate_message_length(message):
+            return False
+
         # Current timestamp for all new data objects
         current_time = time.time()
         
@@ -154,11 +208,33 @@ class CondorUDPParser:
             'ax', 'ay', 'az', 'vx', 'vy', 'vz', 'gforce',
             'height', 'wheelheight', 'turbulencestrength', 'surfaceroughness'
         }
-        
+
         # Only update if we have at least some of the key motion fields
         if not any(field in data_dict for field in ['airspeed', 'altitude', 'vario']):
             return
-            
+
+        # Validate critical values
+        if 'altitude' in data_dict:
+            self._validate_numeric_value('altitude', data_dict['altitude'], MIN_ALTITUDE_M, MAX_ALTITUDE_M)
+
+        if 'airspeed' in data_dict:
+            self._validate_numeric_value('airspeed', data_dict['airspeed'], MIN_AIRSPEED_MPS, MAX_AIRSPEED_MPS)
+
+        if 'vario' in data_dict:
+            self._validate_numeric_value('vario', data_dict['vario'], MIN_VARIO_MPS, MAX_VARIO_MPS)
+
+        if 'evario' in data_dict:
+            self._validate_numeric_value('evario', data_dict['evario'], MIN_VARIO_MPS, MAX_VARIO_MPS)
+
+        if 'nettovario' in data_dict:
+            self._validate_numeric_value('nettovario', data_dict['nettovario'], MIN_VARIO_MPS, MAX_VARIO_MPS)
+
+        if 'gforce' in data_dict:
+            self._validate_numeric_value('gforce', data_dict['gforce'], MIN_G_FORCE, MAX_G_FORCE)
+
+        if 'height' in data_dict:
+            self._validate_numeric_value('height', data_dict['height'], MIN_HEIGHT_AGL, MAX_HEIGHT_AGL)
+
         # Create new motion data object with default values for missing fields
         self.motion_data = CondorMotionData(
             timestamp=timestamp,
