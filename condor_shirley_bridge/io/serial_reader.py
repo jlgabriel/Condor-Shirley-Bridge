@@ -72,6 +72,7 @@ class SerialReader:
         self.error_count = 0
         self.last_received_time = 0
         self.reconnect_attempts = 0
+        self.queue_check_counter = 0  # Track queue checks for periodic cleanup
     
     def open(self) -> bool:
         """
@@ -181,15 +182,29 @@ class SerialReader:
                 if line:
                     # Decode bytes to string and strip whitespace
                     decoded_line = line.decode('ascii', errors='ignore').strip()
-                    
+
                     # Update statistics
                     self.bytes_received += len(line)
                     self.lines_received += 1
                     self.last_received_time = time.time()
-                    
-                    # Put the line in the queue for async interface
-                    self.data_queue.put(decoded_line)
-                    
+
+                    # Periodic queue cleanup check
+                    self.queue_check_counter += 1
+                    if self.queue_check_counter % constants.QUEUE_CLEANUP_CHECK_INTERVAL == 0:
+                        self._cleanup_queue()
+
+                    # Put the line in the queue for async interface (non-blocking)
+                    try:
+                        self.data_queue.put_nowait(decoded_line)
+                    except queue.Full:
+                        # Queue is full, remove oldest item and add new one
+                        try:
+                            self.data_queue.get_nowait()
+                            self.data_queue.put_nowait(decoded_line)
+                            logger.warning("Serial queue full, dropped oldest item")
+                        except queue.Empty:
+                            pass
+
                     # Call the callback function if provided
                     if self.data_callback:
                         try:
@@ -208,7 +223,30 @@ class SerialReader:
                 logger.error(f"Unexpected error in read loop: {e}")
                 self.error_count += 1
                 # Continue reading despite other errors
-    
+
+    def _cleanup_queue(self) -> None:
+        """
+        Clean up the queue if it's approaching capacity.
+        Prevents memory issues by removing old items when queue is > 80% full.
+        """
+        queue_size = self.data_queue.qsize()
+        max_size = constants.SERIAL_QUEUE_MAX_SIZE
+        threshold = int(max_size * 0.8)
+
+        if queue_size > threshold:
+            # Remove 20% of items from the queue
+            items_to_remove = int(max_size * 0.2)
+            removed = 0
+            for _ in range(items_to_remove):
+                try:
+                    self.data_queue.get_nowait()
+                    removed += 1
+                except queue.Empty:
+                    break
+
+            if removed > 0:
+                logger.debug(f"Cleaned {removed} old items from serial queue")
+
     def get_status(self) -> Dict[str, Any]:
         """
         Get the current status of the serial reader.
